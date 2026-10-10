@@ -24,3 +24,9 @@ variable "tc_provider" {
   type    = string
   default = "mock"
 }
+
+variable "domain_name" {
+  description = "Custom domain for the dashboard and API, e.g. truecaller.udchowdhury.me. Empty uses the CloudFront URL."
+  type        = string
+  default     = "truecaller.udchowdhury.me"
+}

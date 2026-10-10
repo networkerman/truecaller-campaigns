@@ -194,6 +194,25 @@ resource "aws_apprunner_service" "api" {
   depends_on = [aws_iam_role_policy_attachment.apprunner_access, aws_iam_role_policy.apprunner_secrets]
 }
 
+# ---------- Custom domain certificate ----------
+
+resource "aws_acm_certificate" "web" {
+  count             = var.domain_name == "" ? 0 : 1
+  provider          = aws.us_east_1
+  domain_name       = var.domain_name
+  validation_method = "DNS"
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+# Waits until the validation CNAME (see the cert_validation_record output) is live in DNS
+resource "aws_acm_certificate_validation" "web" {
+  count           = var.domain_name == "" ? 0 : 1
+  provider        = aws.us_east_1
+  certificate_arn = aws_acm_certificate.web[0].arn
+}
+
 # ---------- Dashboard (S3 + CloudFront) ----------
 
 resource "aws_s3_bucket" "web" {
@@ -226,6 +245,7 @@ resource "aws_cloudfront_distribution" "web" {
   enabled             = true
   default_root_object = "index.html"
   price_class         = "PriceClass_200"
+  aliases             = var.domain_name == "" ? [] : [var.domain_name]
 
   origin {
     origin_id                = "web"
@@ -272,7 +292,10 @@ resource "aws_cloudfront_distribution" "web" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = true
+    cloudfront_default_certificate = var.domain_name == ""
+    acm_certificate_arn            = var.domain_name == "" ? null : aws_acm_certificate_validation.web[0].certificate_arn
+    ssl_support_method             = var.domain_name == "" ? null : "sni-only"
+    minimum_protocol_version       = var.domain_name == "" ? "TLSv1" : "TLSv1.2_2021"
   }
 }
 
