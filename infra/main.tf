@@ -162,6 +162,8 @@ resource "aws_apprunner_service" "api" {
         port = "3000"
         runtime_environment_variables = {
           TC_PROVIDER = var.tc_provider
+          # Campaign sending runs on the ECS worker (worker.tf); App Runner throttles CPU between requests
+          RUN_MODE = "api"
         }
         runtime_environment_secrets = {
           DATABASE_URL      = "${aws_secretsmanager_secret.app.arn}:DATABASE_URL::"
@@ -361,6 +363,7 @@ resource "aws_iam_role_policy" "deploy" {
       { Effect = "Allow", Action = ["s3:PutObject", "s3:DeleteObject"], Resource = "${aws_s3_bucket.web.arn}/*" },
       { Effect = "Allow", Action = "cloudfront:CreateInvalidation", Resource = aws_cloudfront_distribution.web.arn },
       { Effect = "Allow", Action = "secretsmanager:GetSecretValue", Resource = aws_secretsmanager_secret.app.arn },
+      { Effect = "Allow", Action = "ecs:UpdateService", Resource = aws_ecs_service.worker.id },
     ]
   })
 }

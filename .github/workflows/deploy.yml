@@ -32,6 +32,10 @@ jobs:
         run: |
           docker build -t "$IMAGE:${GITHUB_SHA::7}" -t "$IMAGE:latest" server
           docker push --all-tags "$IMAGE"
+      # The campaign worker runs the same image on ECS; restart it on the new :latest
+      - name: Roll the campaign worker
+        if: vars.WORKER_SERVICE != ''
+        run: aws ecs update-service --cluster "${{ vars.WORKER_CLUSTER }}" --service "${{ vars.WORKER_SERVICE }}" --force-new-deployment > /dev/null
 
   web:
     runs-on: ubuntu-latest
@@ -49,11 +53,8 @@ jobs:
       - name: Build
         working-directory: web
         run: |
-          VITE_API_KEY=$(aws secretsmanager get-secret-value --secret-id "${{ vars.APP_SECRET_ARN }}" \
-            --query SecretString --output text | jq -r '.API_KEYS | split(",")[0]')
-          echo "::add-mask::$VITE_API_KEY"
           npm ci
-          VITE_API_KEY="$VITE_API_KEY" npm run build
+          npm run build
       - name: Upload and invalidate
         run: |
           aws s3 sync web/dist "s3://${{ vars.WEB_BUCKET }}" --delete --exclude index.html \

@@ -32,10 +32,28 @@ All `/v1` calls need an `x-api-key` header.
 | GET / PUT / DELETE | `/v1/templates/:id` | Read, edit (moves it back to draft) or delete (blocked once used) |
 | POST | `/v1/templates/:id/submit` | Submit for approval (auto-approved in mock mode) |
 | POST | `/v1/templates/:id/preview` | Render with `{ "values": {...} }` |
+| GET / POST | `/v1/lists` | List or create contact lists |
+| GET / DELETE | `/v1/lists/:id` | List details with a contact sample, or delete it (blocked once a campaign uses it) |
+| POST | `/v1/lists/:id/contacts` | Upload contacts: raw CSV body with `Content-Type: text/csv`. Needs a phone column; other columns become `{{variables}}` |
+| POST / DELETE | `/v1/opt-outs`, `/v1/opt-outs/:phone` | Global opt-out list; opted-out numbers never get campaign messages |
+| GET / POST | `/v1/campaigns` | List or create campaigns (`name`, `template_id`, `list_id`, optional `sender_id`, `launch`, `scheduled_at`) |
+| GET / DELETE | `/v1/campaigns/:id` | Campaign with live counts, or delete a draft |
+| POST | `/v1/campaigns/:id/launch`, `/v1/campaigns/:id/cancel` | Send now (or at `scheduled_at`), or stop |
+| GET | `/v1/campaigns/:id/report`, `/v1/campaigns/:id/messages.csv` | Funnel, rates and failure reasons; per-message export |
+| GET / POST | `/v1/api-keys`, `/v1/api-keys/:id/revoke` | Customer API keys (full key shown once on create) |
 | POST | `/webhooks/truecaller` | Delivery callbacks from Truecaller |
 | GET | `/health` | Health check |
 
 Statuses move forward only: `queued → sent → delivered → read`, or end in `failed` / `blocked`.
+
+## Campaign guardrails
+
+Applied per contact when a campaign sends, based on Truecaller's promo sender rules:
+
+- Opted-out numbers are always skipped.
+- Promotional templates only: max 4 messages per sender to the same number in 28 days, max 3 promo messages per number per day (IST), and a daily cap per sender (`PROMO_DAILY_SENDER_LIMIT`, default 500,000 for Tier 1). When the daily cap is hit the campaign waits and resumes the next day.
+
+Skipped and failed contacts show up in the campaign report with the reason.
 
 ## Providers
 

@@ -9,16 +9,32 @@ export interface NewMessage {
   category: string;
   body: string;
   templateId?: string;
+  campaignId?: string;
+  contactId?: string;
 }
 
-export async function sendMessage(provider: MessagingProvider, msg: NewMessage) {
+// Inserts a message row. Returns null when this campaign contact already has a message (another worker got it).
+export async function insertMessage(
+  provider: MessagingProvider,
+  msg: NewMessage,
+  status: MessageStatus = 'queued',
+  error: string | null = null,
+): Promise<string | null> {
   const { rows } = await pool.query(
-    `INSERT INTO messages (to_number, sender_id, category, body, provider, template_id)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-    [msg.to, msg.senderId, msg.category, msg.body, provider.name, msg.templateId ?? null],
+    `INSERT INTO messages (to_number, sender_id, category, body, provider, template_id, campaign_id, contact_id, status, error)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     ON CONFLICT (campaign_id, contact_id) WHERE campaign_id IS NOT NULL DO NOTHING
+     RETURNING id`,
+    [msg.to, msg.senderId, msg.category, msg.body, provider.name, msg.templateId ?? null,
+     msg.campaignId ?? null, msg.contactId ?? null, status, error],
   );
-  const id: string = rows[0].id;
+  if (!rows[0]) return null;
+  await logEvent(rows[0].id, status, error ? { error } : null);
+  return rows[0].id;
+}
 
+// Hands a queued message to the provider and records the outcome.
+export async function deliver(provider: MessagingProvider, id: string, msg: NewMessage) {
   try {
     const res = await provider.send({ messageId: id, to: msg.to, senderId: msg.senderId, body: msg.body });
     await pool.query(
@@ -31,6 +47,11 @@ export async function sendMessage(provider: MessagingProvider, msg: NewMessage) 
     await pool.query(`UPDATE messages SET status = 'failed', error = $2, updated_at = now() WHERE id = $1`, [id, error]);
     await logEvent(id, 'failed', { error });
   }
+}
+
+export async function sendMessage(provider: MessagingProvider, msg: NewMessage) {
+  const id = (await insertMessage(provider, msg))!;
+  await deliver(provider, id, msg);
   return getMessage(id);
 }
 
@@ -48,7 +69,7 @@ export async function applyStatusUpdate(u: StatusUpdate) {
 
 export async function getMessage(id: string) {
   const { rows } = await pool.query(
-    `SELECT id, to_number AS to, sender_id, category, template_id, body, status, error, created_at, updated_at
+    `SELECT id, to_number AS to, sender_id, category, template_id, campaign_id, body, status, error, created_at, updated_at
      FROM messages WHERE id = $1`,
     [id],
   );

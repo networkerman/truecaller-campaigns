@@ -12,3 +12,16 @@ export const config = {
   },
   apiKeys: (env.API_KEYS ?? 'dev-key').split(',').map((k) => k.trim()).filter(Boolean),
 };
+
+// Guardrails from Truecaller's promo sender rules (India numbers). Promo senders start at Tier 1.
+export const guardrails = {
+  promoDailySenderLimit: Number(env.PROMO_DAILY_SENDER_LIMIT ?? 500_000),
+  promoPerSenderReceiver28d: 4,
+  promoPerUserPerDay: 3,
+};
+
+// Campaign sending speed, messages per second per worker.
+export const sendRate = Number(env.CAMPAIGN_SEND_RATE ?? 20);
+
+// api: HTTP only (App Runner). worker: campaign sender only (ECS). all: both, for local dev.
+export const runMode = (env.RUN_MODE ?? 'all') as 'api' | 'worker' | 'all';
