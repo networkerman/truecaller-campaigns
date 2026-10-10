@@ -191,7 +191,7 @@ resource "aws_apprunner_service" "api" {
     path     = "/health"
   }
 
-  depends_on = [aws_iam_role_policy_attachment.apprunner_access, aws_iam_role_policy.apprunner_secrets]
+  depends_on = [aws_iam_role_policy_attachment.apprunner_access, aws_iam_role_policy.apprunner_secrets, aws_secretsmanager_secret_version.app]
 }
 
 # ---------- Custom domain certificate ----------
@@ -336,7 +336,11 @@ resource "aws_iam_role" "deploy" {
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com" }
-        StringLike   = { "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:ref:refs/heads/main" }
+        # Accept both the classic subject and GitHub's immutable one (repo:owner@id/repo@id:...).
+        StringLike = { "token.actions.githubusercontent.com:sub" = [
+          "repo:${var.github_repo}:ref:refs/heads/main",
+          "repo:${split("/", var.github_repo)[0]}@*/${split("/", var.github_repo)[1]}@*:ref:refs/heads/main",
+        ] }
       }
     }]
   })
