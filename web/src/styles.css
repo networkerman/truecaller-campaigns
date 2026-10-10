@@ -168,3 +168,25 @@ a.btn { text-decoration: none; color: inherit; display: inline-block; }
   .report-head { flex-direction: column; }
   .table { display: block; overflow-x: auto; }
 }
+
+/* ---- sign-in and mobile nav ---- */
+.sidebar { display: flex; flex-direction: column; }
+.signout { margin-top: auto; background: none; border: 0; color: #94a3b8; font: inherit; text-align: left; padding: 9px 10px; cursor: pointer; }
+.signout:hover { color: #fff; }
+.topnav { display: none; }
+.signin { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.signin-card { width: min(380px, 100%); padding: 28px; overflow: visible; }
+.signin-card h1 { margin-top: 8px; }
+.brand.dark { color: var(--text); padding: 0 0 16px; }
+.brand.dark .brand-mark { color: #fff; }
+.field { display: flex; flex-direction: column; gap: 6px; font-weight: 500; margin: 16px 0; }
+.btn.wide { width: 100%; }
+
+@media (max-width: 860px) {
+  .sidebar { display: none; }
+  .shell { grid-template-columns: minmax(0, 1fr); align-content: start; }
+  .content { min-width: 0; }
+  .topnav { display: flex; gap: 4px; overflow-x: auto; background: #0f172a; padding: 8px 12px; }
+  .topnav a { color: #cbd5e1; text-decoration: none; padding: 6px 10px; border-radius: 6px; white-space: nowrap; }
+  .topnav a.active { background: #1e293b; color: #fff; }
+}

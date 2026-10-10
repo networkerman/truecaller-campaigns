@@ -1,4 +1,50 @@
-const API_KEY = import.meta.env.VITE_API_KEY ?? 'dev-key';
+// The dashboard holds no key of its own: the user signs in with an API key, kept in this browser only.
+const KEY_STORE = 'tc_api_key';
+const readStored = () => {
+  try {
+    return localStorage.getItem(KEY_STORE);
+  } catch {
+    return null;
+  }
+};
+let apiKey: string | null = readStored();
+let onUnauthorized: () => void = () => {};
+
+export const session = {
+  signedIn: () => Boolean(apiKey),
+  set(key: string) {
+    apiKey = key;
+    try {
+      localStorage.setItem(KEY_STORE, key);
+    } catch {
+      /* private mode: the key lasts for this page only */
+    }
+  },
+  clear() {
+    apiKey = null;
+    try {
+      localStorage.removeItem(KEY_STORE);
+    } catch {
+      /* ignore */
+    }
+  },
+  onUnauthorized: (fn: () => void) => (onUnauthorized = fn),
+};
+
+// Every request goes through here so an expired or revoked key sends the user back to sign-in.
+async function request(path: string, init: RequestInit = {}) {
+  const res = await fetch(path, { ...init, headers: { ...init.headers, 'x-api-key': apiKey ?? '' } });
+  if (res.status === 401) {
+    session.clear();
+    onUnauthorized();
+  }
+  return res;
+}
+
+export async function checkKey(key: string) {
+  const res = await fetch('/v1/templates', { headers: { 'x-api-key': key } });
+  return res.ok;
+}
 
 export type Category = 'promotional' | 'transactional' | 'service';
 export type TemplateStatus = 'draft' | 'submitted' | 'approved' | 'rejected';
@@ -18,9 +64,9 @@ export interface Template {
 export type TemplateInput = Pick<Template, 'name' | 'category' | 'body'>;
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
+  const res = await request(path, {
     method,
-    headers: { 'x-api-key': API_KEY, ...(body ? { 'content-type': 'application/json' } : {}) },
+    headers: body ? { 'content-type': 'application/json' } : {},
     body: body ? JSON.stringify(body) : undefined,
   });
   if (res.status === 204) return undefined as T;
@@ -108,14 +154,14 @@ export interface ApiKey {
 }
 
 async function upload<T>(path: string, file: File): Promise<T> {
-  const res = await fetch(path, { method: 'POST', headers: { 'x-api-key': API_KEY, 'content-type': 'text/csv' }, body: await file.text() });
+  const res = await request(path, { method: 'POST', headers: { 'content-type': 'text/csv' }, body: await file.text() });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? `Upload failed (${res.status})`);
   return data as T;
 }
 
 export async function downloadCsv(path: string, filename: string) {
-  const res = await fetch(path, { headers: { 'x-api-key': API_KEY } });
+  const res = await request(path);
   if (!res.ok) throw new Error(`Download failed (${res.status})`);
   const url = URL.createObjectURL(await res.blob());
   const a = Object.assign(document.createElement('a'), { href: url, download: filename });
