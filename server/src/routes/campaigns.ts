@@ -26,9 +26,12 @@ const CreateBody = z.object({
   scheduled_at: z.string().datetime({ offset: true }).optional(),
 });
 
-export async function campaignRoutes(app: FastifyInstance, opts: { provider: MessagingProvider }) {
+export async function campaignRoutes(app: FastifyInstance, opts: { provider: MessagingProvider; sender: boolean }) {
   app.addHook('onRequest', requireApiKey);
-  const kick = () => void tick(opts.provider).catch((err) => app.log.error(err, 'campaign tick failed'));
+  // When the sender runs in this process, start the first batch right away instead of waiting for the next tick.
+  const kick = () => {
+    if (opts.sender) void tick(opts.provider).catch((err) => app.log.error(err, 'campaign tick failed'));
+  };
 
   app.get('/v1/campaigns', async () => ({ data: await listCampaigns() }));
 

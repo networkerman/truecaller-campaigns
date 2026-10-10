@@ -22,3 +22,6 @@ export const guardrails = {
 
 // Campaign sending speed, messages per second per worker.
 export const sendRate = Number(env.CAMPAIGN_SEND_RATE ?? 20);
+
+// api: HTTP only (App Runner). worker: campaign sender only (ECS). all: both, for local dev.
+export const runMode = (env.RUN_MODE ?? 'all') as 'api' | 'worker' | 'all';

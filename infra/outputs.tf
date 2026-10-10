@@ -35,5 +35,7 @@ output "github_variables" {
     WEB_BUCKET          = aws_s3_bucket.web.bucket
     CLOUDFRONT_ID       = aws_cloudfront_distribution.web.id
     APP_SECRET_ARN      = aws_secretsmanager_secret.app.arn
+    WORKER_CLUSTER      = aws_ecs_cluster.main.name
+    WORKER_SERVICE      = aws_ecs_service.worker.name
   }
 }

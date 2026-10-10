@@ -1,8 +1,8 @@
 # AWS deployment
 
-Region `ap-south-1`. The API runs on App Runner, the database on RDS Postgres 16, and the dashboard on S3 + CloudFront. CloudFront sends `/v1/*`, `/webhooks/*` and `/health` to the API, so everything is served from one URL.
+Region `ap-south-1`. The API runs on App Runner, the campaign sender on an always-on ECS Fargate task (`worker.tf`, same image with `RUN_MODE=worker`), the database on RDS Postgres 16, and the dashboard on S3 + CloudFront. CloudFront sends `/v1/*`, `/webhooks/*` and `/health` to the API, so everything is served from one URL.
 
-Rough cost: $30–45/month (RDS t4g.micro ~$15, App Runner 0.25 vCPU ~$10–25, rest is small).
+Rough cost: $40–55/month (RDS t4g.micro ~$15, App Runner 0.25 vCPU ~$10–25, Fargate worker 0.25 vCPU ~$9, rest is small).
 
 ## First-time setup (once)
 
@@ -35,7 +35,7 @@ terraform output domain_cname_record
 
 If the account already has the GitHub OIDC provider, add `-var create_github_oidc_provider=false` to the applies.
 
-Then in GitHub → **Settings → Secrets and variables → Actions → Variables**, add the five values from `github_variables`. Re-run the **Deploy** workflow (or push to `main`) to publish the dashboard.
+Then in GitHub → **Settings → Secrets and variables → Actions → Variables**, add the values from `github_variables` (seven, including `WORKER_CLUSTER` and `WORKER_SERVICE`). Re-run the **Deploy** workflow (or push to `main`) to publish the dashboard.
 
 Open https://truecaller.udchowdhury.me once DNS has picked up the CNAME (usually a few minutes).
 
@@ -56,3 +56,15 @@ Every push to `main` builds the API image (App Runner picks it up on its own) an
 - Terraform state is local. Keep `infra/terraform.tfstate` safe (it holds the DB password) or move it to an S3 backend before anyone else runs Terraform.
 - The dashboard has the API key built into its JavaScript, so anyone who opens the dashboard can read it. Fine for a mock demo; replace with a login before real customers or real sends.
 - RDS has deletion protection on. To tear down, turn it off first.
+
+## Adding the campaign worker to an existing stack
+
+If the stack was created before `worker.tf` existed:
+
+```bash
+cd infra
+terraform apply
+terraform output github_variables   # add WORKER_CLUSTER and WORKER_SERVICE as repo variables
+```
+
+Worker logs are in CloudWatch under `/ecs/truecaller-campaigns-worker`.

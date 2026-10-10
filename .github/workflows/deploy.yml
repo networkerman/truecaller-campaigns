@@ -32,6 +32,10 @@ jobs:
         run: |
           docker build -t "$IMAGE:${GITHUB_SHA::7}" -t "$IMAGE:latest" server
           docker push --all-tags "$IMAGE"
+      # The campaign worker runs the same image on ECS; restart it on the new :latest
+      - name: Roll the campaign worker
+        if: vars.WORKER_SERVICE != ''
+        run: aws ecs update-service --cluster "${{ vars.WORKER_CLUSTER }}" --service "${{ vars.WORKER_SERVICE }}" --force-new-deployment > /dev/null
 
   web:
     runs-on: ubuntu-latest
