@@ -97,6 +97,10 @@ function ListDrawer({ id, onClose, onChanged }: { id: string | null; onClose: ()
             {file ? `${(file.size / 1024).toFixed(1)} KB` : 'Needs a phone or mobile column. 10-digit numbers are treated as Indian (+91). Re-uploading updates existing contacts.'}
           </span>
         </label>
+        <p className="hint">
+          Columns other than phone become template variables: <code>first_name</code> fills <code>{'{{first_name}}'}</code>.{' '}
+          <a href="/sample-contacts.csv" download="sample-contacts.csv">Download a sample CSV</a>
+        </p>
 
         {error && <div className="banner error">{error}</div>}
         {result && (

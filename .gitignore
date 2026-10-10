@@ -6,3 +6,6 @@ dist
 *.tfstate
 *.tfstate.*
 *.tfvars
+
+# Local contact files with real numbers
+local/
