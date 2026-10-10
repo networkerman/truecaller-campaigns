@@ -1,38 +1,54 @@
 import type { FastifyInstance } from 'fastify';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { z } from 'zod';
+import { requireApiKey } from '../auth.js';
 import { config } from '../config.js';
 import { getMessage, sendMessage } from '../messages.js';
 import type { MessagingProvider } from '../providers/types.js';
+import { getTemplate, render } from '../templates.js';
 
-const SendBody = z.object({
-  to: z.string(),
-  body: z.string().min(1).max(1000),
-  sender_id: z.string().optional(),
-  category: z.enum(['promotional', 'transactional', 'service']).default('transactional'),
-});
+// Either a free-text body, or an approved template plus its variable values.
+const SendBody = z
+  .object({
+    to: z.string(),
+    sender_id: z.string().optional(),
+    body: z.string().min(1).max(1000).optional(),
+    category: z.enum(['promotional', 'transactional', 'service']).default('transactional'),
+    template_id: z.string().uuid().optional(),
+    variables: z.record(z.string(), z.string()).default({}),
+  })
+  .refine((b) => Boolean(b.body) !== Boolean(b.template_id), { message: 'send either body or template_id' });
 
 export async function messageRoutes(app: FastifyInstance, opts: { provider: MessagingProvider }) {
-  app.addHook('onRequest', async (req, reply) => {
-    const key = req.headers['x-api-key'];
-    if (typeof key !== 'string' || !config.apiKeys.includes(key)) {
-      return reply.code(401).send({ error: 'invalid or missing x-api-key' });
-    }
-  });
+  app.addHook('onRequest', requireApiKey);
 
   app.post('/v1/messages', async (req, reply) => {
     const parsed = SendBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'invalid body', details: parsed.error.issues });
+    const data = parsed.data;
 
     // Bare 10-digit numbers are treated as Indian, the first market.
-    const phone = parsePhoneNumberFromString(parsed.data.to, 'IN');
+    const phone = parsePhoneNumberFromString(data.to, 'IN');
     if (!phone?.isValid()) return reply.code(400).send({ error: 'invalid phone number' });
+
+    let body = data.body ?? '';
+    let category: string = data.category;
+    if (data.template_id) {
+      const t = await getTemplate(data.template_id);
+      if (!t) return reply.code(400).send({ error: 'template not found' });
+      if (t.status !== 'approved') return reply.code(400).send({ error: `template is ${t.status}, not approved` });
+      const out = render(t.body, data.variables);
+      if ('error' in out) return reply.code(400).send(out);
+      body = out.text;
+      category = t.category;
+    }
 
     const msg = await sendMessage(opts.provider, {
       to: phone.number,
-      senderId: parsed.data.sender_id ?? config.tc.senderId,
-      category: parsed.data.category,
-      body: parsed.data.body,
+      senderId: data.sender_id ?? config.tc.senderId,
+      category,
+      body,
+      templateId: data.template_id,
     });
     return reply.code(202).send(msg);
   });

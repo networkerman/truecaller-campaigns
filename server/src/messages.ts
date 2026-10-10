@@ -8,13 +8,14 @@ export interface NewMessage {
   senderId: string;
   category: string;
   body: string;
+  templateId?: string;
 }
 
 export async function sendMessage(provider: MessagingProvider, msg: NewMessage) {
   const { rows } = await pool.query(
-    `INSERT INTO messages (to_number, sender_id, category, body, provider)
-     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-    [msg.to, msg.senderId, msg.category, msg.body, provider.name],
+    `INSERT INTO messages (to_number, sender_id, category, body, provider, template_id)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+    [msg.to, msg.senderId, msg.category, msg.body, provider.name, msg.templateId ?? null],
   );
   const id: string = rows[0].id;
 
@@ -47,7 +48,7 @@ export async function applyStatusUpdate(u: StatusUpdate) {
 
 export async function getMessage(id: string) {
   const { rows } = await pool.query(
-    `SELECT id, to_number AS to, sender_id, category, body, status, error, created_at, updated_at
+    `SELECT id, to_number AS to, sender_id, category, template_id, body, status, error, created_at, updated_at
      FROM messages WHERE id = $1`,
     [id],
   );

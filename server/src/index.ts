@@ -5,6 +5,7 @@ import { applyStatusUpdate } from './messages.js';
 import { createMockProvider } from './providers/mock.js';
 import { createTruecallerProvider } from './providers/truecaller.js';
 import { messageRoutes } from './routes/messages.js';
+import { templateRoutes } from './routes/templates.js';
 import { webhookRoutes } from './routes/webhooks.js';
 
 const app = Fastify({ logger: true });
@@ -21,6 +22,7 @@ app.get('/health', async () => {
   return { ok: true, provider: provider.name };
 });
 await app.register(messageRoutes, { provider });
+await app.register(templateRoutes);
 await app.register(webhookRoutes, { provider });
 
 await app.listen({ port: config.port, host: '0.0.0.0' });
