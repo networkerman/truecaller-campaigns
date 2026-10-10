@@ -20,16 +20,26 @@ REPO=$(terraform output -raw ecr_repository_url)
 aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin "${REPO%%/*}"
 docker build -t "$REPO:latest" ../server && docker push "$REPO:latest"
 
-# 3. Create everything else (~15 min, mostly RDS and CloudFront)
+# 3. Request the SSL certificate for truecaller.udchowdhury.me
+terraform apply -target=aws_acm_certificate.web
+terraform output cert_validation_record
+#    Add that CNAME at your DNS provider, then continue
+
+# 4. Create everything else (~15 min, mostly RDS and CloudFront).
+#    It waits for the certificate to validate, so the DNS record must be in place.
 terraform apply
 terraform output github_variables
+terraform output domain_cname_record
+#    Add this CNAME too: truecaller.udchowdhury.me -> dxxxx.cloudfront.net
 ```
 
 If the account already has the GitHub OIDC provider, add `-var create_github_oidc_provider=false` to the applies.
 
 Then in GitHub → **Settings → Secrets and variables → Actions → Variables**, add the five values from `github_variables`. Re-run the **Deploy** workflow (or push to `main`) to publish the dashboard.
 
-Open `terraform output dashboard_url`.
+Open https://truecaller.udchowdhury.me once DNS has picked up the CNAME (usually a few minutes).
+
+To skip the custom domain, add `-var domain_name=` to every apply.
 
 ## After that
 
