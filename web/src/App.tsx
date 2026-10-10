@@ -1,14 +1,31 @@
+import { useEffect, useState } from 'react';
+import { ApiKeysPage } from './ApiKeysPage';
+import { CampaignsPage } from './CampaignsPage';
+import { ListsPage } from './ListsPage';
+import { ReportsPage } from './ReportsPage';
 import { TemplatesPage } from './TemplatesPage';
 
 const NAV = [
-  { label: 'Templates', ready: true },
-  { label: 'Campaigns', ready: false },
-  { label: 'Contact lists', ready: false },
-  { label: 'Reports', ready: false },
-  { label: 'API keys', ready: false },
+  { path: 'campaigns', label: 'Campaigns' },
+  { path: 'templates', label: 'Templates' },
+  { path: 'lists', label: 'Contact lists' },
+  { path: 'reports', label: 'Reports' },
+  { path: 'api-keys', label: 'API keys' },
 ];
 
+const parse = () => {
+  const [page = 'campaigns', id = null] = location.hash.replace(/^#\/?/, '').split('/');
+  return { page: NAV.some((n) => n.path === page) ? page : 'campaigns', id };
+};
+
 export function App() {
+  const [route, setRoute] = useState(parse);
+  useEffect(() => {
+    const on = () => setRoute(parse());
+    window.addEventListener('hashchange', on);
+    return () => window.removeEventListener('hashchange', on);
+  }, []);
+
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -18,15 +35,16 @@ export function App() {
         </div>
         <nav>
           {NAV.map((n) => (
-            <a key={n.label} className={n.ready ? 'active' : 'disabled'} aria-disabled={!n.ready}>
-              {n.label}
-              {!n.ready && <small>Soon</small>}
-            </a>
+            <a key={n.path} href={`#/${n.path}`} className={route.page === n.path ? 'active' : ''}>{n.label}</a>
           ))}
         </nav>
       </aside>
       <main className="content">
-        <TemplatesPage />
+        {route.page === 'campaigns' && <CampaignsPage />}
+        {route.page === 'templates' && <TemplatesPage />}
+        {route.page === 'lists' && <ListsPage />}
+        {route.page === 'reports' && <ReportsPage id={route.id} onSelect={(id) => (location.hash = `#/reports/${id}`)} />}
+        {route.page === 'api-keys' && <ApiKeysPage />}
       </main>
     </div>
   );
