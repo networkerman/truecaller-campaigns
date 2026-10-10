@@ -62,4 +62,15 @@ Skipped and failed contacts show up in the campaign report with the reason.
 
 ## Deploy
 
-AWS setup (App Runner + RDS + CloudFront) lives in [`infra/`](infra/README.md).
+Runs on one EC2 box (t3.small, ap-south-1) with Docker Compose: Postgres, the API, the
+always-on campaign worker, and Caddy serving the dashboard with automatic HTTPS. See [`deploy/`](deploy/).
+
+```bash
+SSH_KEY=~/.ssh/truecaller-campaigns.pem ./deploy/push.sh ubuntu@13.232.158.14
+```
+
+`push.sh` rsyncs the checkout and runs `docker compose up -d --build`. Secrets live on the box in
+`/etc/truecaller-campaigns.env` (root, 0600), created once by `deploy/setup-env.sh`, outside the
+rsync target. The database is the `pgdata` Docker volume.
+
+`infra/` holds the earlier App Runner + RDS + CloudFront setup, kept until it is destroyed.

@@ -1,0 +1,60 @@
+# Everything on one box: Postgres, the API, the campaign worker, and Caddy serving the
+# dashboard with automatic HTTPS. Secrets come from /etc/truecaller-campaigns.env.
+name: truecaller-campaigns
+
+x-app: &app
+  build: ../server
+  image: truecaller-campaigns-server
+  env_file: ${ENV_FILE:-/etc/truecaller-campaigns.env}
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:16-alpine
+    env_file: ${ENV_FILE:-/etc/truecaller-campaigns.env}
+    environment:
+      POSTGRES_DB: truecaller
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d truecaller"]
+      interval: 5s
+      retries: 20
+
+  # Runs migrations on start, then serves the API.
+  api:
+    <<: *app
+    environment:
+      RUN_MODE: api
+
+  # Always-on campaign sender. Skips migrations; the api container runs them.
+  worker:
+    <<: *app
+    environment:
+      RUN_MODE: worker
+    command: ["node", "dist/index.js"]
+    depends_on:
+      api:
+        condition: service_started
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    env_file: ${ENV_FILE:-/etc/truecaller-campaigns.env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+    restart: unless-stopped
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  caddy_data:
