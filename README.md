@@ -41,3 +41,7 @@ Statuses move forward only: `queued → sent → delivered → read`, or end in 
 
 `TC_PROVIDER=mock` simulates the channel (delivered, then read; numbers ending in `0000` fail).
 `TC_PROVIDER=truecaller` uses the real API in `server/src/providers/truecaller.ts`.
+
+## Deploy
+
+AWS setup (App Runner + RDS + CloudFront) lives in [`infra/`](infra/README.md).
