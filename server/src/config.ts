@@ -10,5 +10,8 @@ export const config = {
     senderId: env.TC_SENDER_ID ?? 'DEMO',
     webhookSecret: env.TC_WEBHOOK_SECRET ?? '',
   },
+  // Campaign messages handed to the provider per second
+  sendRatePerSecond: Math.max(1, Number(env.SEND_RATE_PER_SECOND ?? 20)),
+  // Bootstrap keys from the environment. Keys made on the API keys page live in the database.
   apiKeys: (env.API_KEYS ?? 'dev-key').split(',').map((k) => k.trim()).filter(Boolean),
 };

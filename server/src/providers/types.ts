@@ -1,4 +1,4 @@
-export type MessageStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | 'blocked';
+export type MessageStatus = 'queued' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed' | 'blocked';
 
 export interface SendRequest {
   messageId: string;
