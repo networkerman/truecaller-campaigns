@@ -1,0 +1,18 @@
+# Caddy gets and renews the HTTPS certificate for $DOMAIN by itself.
+{$DOMAIN} {
+	encode gzip
+
+	@api path /v1/* /webhooks/* /health
+	handle @api {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		root * /srv
+		@index path / /index.html
+		header @index Cache-Control "no-cache"
+		header /assets/* Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} /index.html
+		file_server
+	}
+}
