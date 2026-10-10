@@ -73,4 +73,13 @@ SSH_KEY=~/.ssh/truecaller-campaigns.pem ./deploy/push.sh ubuntu@13.232.158.14
 `/etc/truecaller-campaigns.env` (root, 0600), created once by `deploy/setup-env.sh`, outside the
 rsync target. The database is the `pgdata` Docker volume.
 
+Backups: `deploy/backup.sh` runs nightly at 02:30 IST from `/etc/cron.d/truecaller-backup` and uploads a
+gzipped `pg_dump` to `s3://truecaller-campaigns-backups-902785551204/db/`, kept for 30 days. The box's IAM role
+`truecaller-campaigns-box` can only write under that prefix. To restore:
+
+```bash
+aws s3 cp s3://truecaller-campaigns-backups-902785551204/db/<file>.sql.gz - | gunzip | \
+  sudo docker compose -f /opt/truecaller-campaigns/deploy/docker-compose.yml exec -T db psql -U postgres -d truecaller
+```
+
 `infra/` holds the earlier App Runner + RDS + CloudFront setup, kept until it is destroyed.
