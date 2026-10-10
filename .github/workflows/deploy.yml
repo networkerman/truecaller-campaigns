@@ -1,0 +1,93 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-south-1
+  STACK: truecaller-campaigns
+  SITE_ADDRESS: truecaller.udchowdhury.me
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Create or update infrastructure
+        run: |
+          aws cloudformation deploy --stack-name "$STACK" --template-file deploy/cloudformation.yml \
+            --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset
+          out() { aws cloudformation describe-stacks --stack-name "$STACK" --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+          echo "INSTANCE_ID=$(out InstanceId)" >> "$GITHUB_ENV"
+          echo "PUBLIC_IP=$(out PublicIp)" >> "$GITHUB_ENV"
+          echo "SERVER_REPO=$(out ServerRepoUri)" >> "$GITHUB_ENV"
+          echo "WEB_REPO=$(out WebRepoUri)" >> "$GITHUB_ENV"
+
+      - name: Store app secrets in Parameter Store
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
+          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+        run: |
+          test -n "$API_KEY" && test -n "$DASHBOARD_PASSWORD" || { echo "API_KEY and DASHBOARD_PASSWORD secrets are required"; exit 1; }
+          HASH=$(docker run --rm caddy:2.10-alpine caddy hash-password --plaintext "$DASHBOARD_PASSWORD")
+          aws ssm put-parameter --name /truecaller/API_KEYS --type SecureString --overwrite --value "$API_KEY" >/dev/null
+          aws ssm put-parameter --name /truecaller/DASHBOARD_PASSWORD_HASH --type SecureString --overwrite --value "$HASH" >/dev/null
+
+      - name: Build and push images
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          aws ecr get-login-password | docker login --username AWS --password-stdin "${SERVER_REPO%%/*}"
+          docker build -t "$SERVER_REPO:$GITHUB_SHA" server
+          docker build -t "$WEB_REPO:$GITHUB_SHA" --build-arg VITE_API_KEY="$API_KEY" web
+          docker push "$SERVER_REPO:$GITHUB_SHA"
+          docker push "$WEB_REPO:$GITHUB_SHA"
+
+      - name: Roll out on the host
+        run: |
+          # A fresh instance needs a few minutes to register with SSM and finish installing Docker.
+          for i in $(seq 1 40); do
+            online=$(aws ssm describe-instance-information --filters "Key=InstanceIds,Values=$INSTANCE_ID" --query "InstanceInformationList[0].PingStatus" --output text)
+            [ "$online" = "Online" ] && break
+            echo "waiting for host ($online)"; sleep 15
+          done
+
+          COMPOSE=$(base64 -w0 deploy/docker-compose.yml)
+          SCRIPT=$(base64 -w0 deploy/remote-deploy.sh)
+          CMD="set -e
+          for i in \$(seq 1 40); do [ -f /opt/truecaller/.bootstrapped ] && break; sleep 10; done
+          echo $COMPOSE | base64 -d > /opt/truecaller/docker-compose.yml
+          echo $SCRIPT | base64 -d > /opt/truecaller/remote-deploy.sh
+          bash /opt/truecaller/remote-deploy.sh $SERVER_REPO:$GITHUB_SHA $WEB_REPO:$GITHUB_SHA $AWS_REGION $SITE_ADDRESS"
+
+          ID=$(aws ssm send-command --instance-ids "$INSTANCE_ID" --document-name AWS-RunShellScript \
+            --parameters "$(jq -n --arg c "$CMD" '{commands: [$c], executionTimeout: ["900"]}')" \
+            --query Command.CommandId --output text)
+          for i in $(seq 1 90); do
+            STATUS=$(aws ssm get-command-invocation --command-id "$ID" --instance-id "$INSTANCE_ID" --query Status --output text 2>/dev/null || echo Pending)
+            case "$STATUS" in Success|Failed|Cancelled|TimedOut) break;; esac
+            sleep 10
+          done
+          aws ssm get-command-invocation --command-id "$ID" --instance-id "$INSTANCE_ID" --query '[StandardOutputContent,StandardErrorContent]' --output text
+          [ "$STATUS" = "Success" ]
+
+      - name: Summary
+        run: |
+          {
+            echo "### Deployed $GITHUB_SHA"
+            echo "- Host IP: \`$PUBLIC_IP\` (A record for \`$SITE_ADDRESS\` must point here)"
+            echo "- Health: https://$SITE_ADDRESS/health"
+          } >> "$GITHUB_STEP_SUMMARY"

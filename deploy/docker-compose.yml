@@ -1,0 +1,48 @@
+# Runs on the EC2 host. Values come from /opt/truecaller/.env, written by deploy/remote-deploy.sh.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: truecaller
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: truecaller
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U truecaller"]
+      interval: 5s
+      retries: 10
+
+  server:
+    image: ${SERVER_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://truecaller:${DB_PASSWORD}@db:5432/truecaller
+      TC_PROVIDER: ${TC_PROVIDER:-mock}
+      TC_API_BASE_URL: ${TC_API_BASE_URL:-}
+      TC_API_KEY: ${TC_API_KEY:-}
+      TC_SENDER_ID: ${TC_SENDER_ID:-DEMO}
+      TC_WEBHOOK_SECRET: ${TC_WEBHOOK_SECRET:-}
+      API_KEYS: ${API_KEYS}
+
+  web:
+    image: ${WEB_IMAGE}
+    restart: unless-stopped
+    depends_on: [server]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+      DASHBOARD_USER: ${DASHBOARD_USER:-admin}
+      DASHBOARD_PASSWORD_HASH: ${DASHBOARD_PASSWORD_HASH}
+    volumes:
+      - caddy_data:/data
+
+volumes:
+  pgdata:
+  caddy_data:

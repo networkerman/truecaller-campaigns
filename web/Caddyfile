@@ -1,0 +1,19 @@
+{$SITE_ADDRESS::80} {
+	encode gzip
+
+	# API and Truecaller callbacks are protected by API key / webhook secret, not the dashboard login.
+	@api path /v1/* /webhooks/* /health
+	handle @api {
+		reverse_proxy server:3000
+	}
+
+	# The dashboard sits behind a login until proper user accounts land.
+	handle {
+		basic_auth {
+			{$DASHBOARD_USER:admin} {$DASHBOARD_PASSWORD_HASH}
+		}
+		root * {$WEB_ROOT:/srv}
+		try_files {path} /index.html
+		file_server
+	}
+}
