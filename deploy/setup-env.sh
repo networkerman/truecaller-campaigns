@@ -12,6 +12,9 @@ DOMAIN=${DOMAIN:-truecaller.udchowdhury.me}
 POSTGRES_PASSWORD=$pw
 DATABASE_URL=postgres://postgres:$pw@db:5432/truecaller
 API_KEYS=$key
+ALLOWED_EMAIL_DOMAINS=onextel.com
+SMTP_URL=
+MAIL_FROM=Truecaller Campaigns <no-reply@onextel.com>
 TC_PROVIDER=mock
 TC_API_BASE_URL=
 TC_API_KEY=
@@ -19,4 +22,4 @@ TC_SENDER_ID=
 TC_WEBHOOK_SECRET=
 EOT
 sudo chmod 600 "$ENV"
-echo "created $ENV. Read the sign-in key with: sudo grep API_KEYS $ENV"
+echo "created $ENV. Set SMTP_URL in it so signup emails go out."
