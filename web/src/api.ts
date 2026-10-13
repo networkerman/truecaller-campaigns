@@ -106,6 +106,14 @@ export interface UploadResult {
   attribute_columns: string[];
 }
 
+export interface CheckResult extends Omit<UploadResult, 'added' | 'updated'> {
+  valid: number;
+  preview: { phone: string; attributes: Record<string, string> }[];
+}
+
+// Where a campaign audience comes from. A link is fetched by the server, so it must be public.
+export type AudienceSource = { kind: 'file'; file: File } | { kind: 'sheet' | 'url'; url: string };
+
 export type CampaignStatus = 'draft' | 'scheduled' | 'running' | 'completed' | 'cancelled';
 
 export interface Campaign {
@@ -153,8 +161,11 @@ export interface ApiKey {
   key?: string;
 }
 
+const XLSX_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+export const isXlsx = (file: File) => /\.xlsx$/i.test(file.name);
+
 async function upload<T>(path: string, file: File): Promise<T> {
-  const res = await request(path, { method: 'POST', headers: { 'content-type': 'text/csv' }, body: await file.text() });
+  const res = await request(path, { method: 'POST', headers: { 'content-type': isXlsx(file) ? XLSX_TYPE : 'text/csv' }, body: file });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? `Upload failed (${res.status})`);
   return data as T;
@@ -175,6 +186,14 @@ export const lists = {
   create: (name: string) => call<ContactList>('POST', '/v1/lists', { name }),
   remove: (id: string) => call<void>('DELETE', `/v1/lists/${id}`),
   upload: (id: string, file: File) => upload<UploadResult>(`/v1/lists/${id}/contacts`, file),
+  validate: (src: AudienceSource) =>
+    src.kind === 'file'
+      ? upload<CheckResult>('/v1/lists/validate', src.file)
+      : call<CheckResult>('POST', '/v1/lists/validate', { source: src.kind, url: src.url }),
+  importFrom: (id: string, src: AudienceSource) =>
+    src.kind === 'file'
+      ? upload<UploadResult>(`/v1/lists/${id}/contacts`, src.file)
+      : call<UploadResult>('POST', `/v1/lists/${id}/contacts`, { source: src.kind, url: src.url }),
 };
 
 export const campaigns = {

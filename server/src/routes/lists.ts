@@ -2,13 +2,32 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireApiKey } from '../auth.js';
 import { pool } from '../db.js';
-import { createList, deleteList, getList, importCsv, listLists, normalizePhone, sampleContacts } from '../lists.js';
+import { checkRecords, createList, deleteList, getList, importRecords, listLists, normalizePhone, sampleContacts } from '../lists.js';
+import { MAX_AUDIENCE_BYTES, SourceError, XLSX_TYPE, readFile, rowsFromLink } from '../sources.js';
 
 const Id = z.object({ id: z.string().uuid() });
+const LinkBody = z.object({ source: z.enum(['sheet', 'url']), url: z.string().trim().min(1).max(2000) });
+
+// An audience arrives as a raw CSV body (text/csv), a raw .xlsx body, or JSON
+// { "source": "sheet" | "url", "url": "..." } for a public Google Sheet or CSV link.
+async function rowsFromRequest(body: unknown): Promise<string[][] | { error: string; status: number }> {
+  try {
+    if (typeof body === 'string' || Buffer.isBuffer(body)) return await readFile(body);
+    const link = LinkBody.safeParse(body);
+    if (link.success) return await rowsFromLink(link.data.source, link.data.url);
+    return { status: 415, error: 'Send a CSV (text/csv) or .xlsx file, or JSON with source and url.' };
+  } catch (err) {
+    if (err instanceof SourceError) return { status: 400, error: err.message };
+    throw err;
+  }
+}
 
 export async function listRoutes(app: FastifyInstance) {
   app.addHook('onRequest', requireApiKey);
-  app.addContentTypeParser(['text/csv', 'text/plain'], { parseAs: 'string', bodyLimit: 25 * 1024 * 1024 }, (_req, body, done) =>
+  app.addContentTypeParser(['text/csv', 'text/plain'], { parseAs: 'string', bodyLimit: MAX_AUDIENCE_BYTES }, (_req, body, done) =>
+    done(null, body),
+  );
+  app.addContentTypeParser([XLSX_TYPE, 'application/octet-stream'], { parseAs: 'buffer', bodyLimit: MAX_AUDIENCE_BYTES }, (_req, body, done) =>
     done(null, body),
   );
 
@@ -41,13 +60,21 @@ export async function listRoutes(app: FastifyInstance) {
     return reply.code(204).send();
   });
 
-  // Body is the raw CSV file, sent with Content-Type: text/csv.
+  // Checks an audience without saving it: counts, invalid numbers, columns and a short preview.
+  app.post('/v1/lists/validate', async (req, reply) => {
+    const rows = await rowsFromRequest(req.body);
+    if (!Array.isArray(rows)) return reply.code(rows.status).send({ error: rows.error });
+    const checked = checkRecords(rows);
+    return 'error' in checked ? reply.code(400).send(checked) : checked.result;
+  });
+
   app.post('/v1/lists/:id/contacts', async (req, reply) => {
     const p = Id.safeParse(req.params);
     const list = p.success ? await getList(p.data.id) : null;
     if (!list) return reply.code(404).send({ error: 'not found' });
-    if (typeof req.body !== 'string') return reply.code(415).send({ error: 'send the CSV file with Content-Type: text/csv' });
-    const res = await importCsv(list.id, req.body);
+    const rows = await rowsFromRequest(req.body);
+    if (!Array.isArray(rows)) return reply.code(rows.status).send({ error: rows.error });
+    const res = await importRecords(list.id, rows);
     return 'error' in res ? reply.code(400).send(res) : res;
   });
 

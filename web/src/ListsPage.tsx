@@ -91,8 +91,8 @@ function ListDrawer({ id, onClose, onChanged }: { id: string | null; onClose: ()
           </label>
         )}
         <label className="dropzone">
-          <input type="file" accept=".csv,text/csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-          <span className="strong">{file ? file.name : 'Choose a CSV file'}</span>
+          <input type="file" accept=".csv,.xlsx,text/csv" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          <span className="strong">{file ? file.name : 'Choose a .csv or .xlsx file'}</span>
           <span className="hint">
             {file ? `${(file.size / 1024).toFixed(1)} KB` : 'Needs a phone or mobile column. 10-digit numbers are treated as Indian (+91). Re-uploading updates existing contacts.'}
           </span>

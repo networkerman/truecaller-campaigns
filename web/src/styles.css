@@ -190,3 +190,23 @@ a.btn { text-decoration: none; color: inherit; display: inline-block; }
   .topnav a { color: #cbd5e1; text-decoration: none; padding: 6px 10px; border-radius: 6px; white-space: nowrap; }
   .topnav a.active { background: #1e293b; color: #fff; }
 }
+
+/* ---- campaign audience ---- */
+.audience { display: flex; flex-direction: column; gap: 12px; }
+.audience .label { font-weight: 500; }
+.audience-modes { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.audience-modes label.inline { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+.info { display: inline-grid; place-items: center; width: 16px; height: 16px; border: 1.5px solid var(--muted); border-radius: 50%; font-size: 10px; font-weight: 700; color: var(--muted); cursor: help; }
+.audience-panel { border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: #fafbfc; display: flex; flex-direction: column; gap: 10px; }
+.audience-panel.drop { border: 1.5px dashed #9fb3c8; }
+.audience-panel.over { border-color: var(--brand); background: #f0f6ff; }
+.req-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.req-head h3 { margin: 0; }
+.req-head a.link { text-decoration: none; font-size: 13px; font-weight: 600; }
+.req-list { margin: 0; padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.req-column { border: 1px solid var(--line); border-radius: 6px; background: #fff; padding: 8px; text-align: center; font-weight: 600; letter-spacing: .04em; }
+.req-action { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; padding-top: 4px; }
+.req-action.link-row { justify-content: stretch; flex-wrap: nowrap; }
+.req-action.link-row .input { flex: 1; min-width: 0; }
+.req-action .btn { white-space: nowrap; }
+@media (max-width: 520px) { .req-action.link-row { flex-wrap: wrap; } }
