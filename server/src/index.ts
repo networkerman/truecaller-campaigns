@@ -5,11 +5,13 @@ import { pool } from './db.js';
 import { applyStatusUpdate } from './messages.js';
 import { createMockProvider } from './providers/mock.js';
 import { createTruecallerProvider } from './providers/truecaller.js';
+import { bootstrapSuperAdmins } from './team.js';
 import { apiKeyRoutes } from './routes/apiKeys.js';
 import { authRoutes } from './routes/auth.js';
 import { campaignRoutes } from './routes/campaigns.js';
 import { listRoutes } from './routes/lists.js';
 import { messageRoutes } from './routes/messages.js';
+import { teamRoutes } from './routes/team.js';
 import { templateRoutes } from './routes/templates.js';
 import { webhookRoutes } from './routes/webhooks.js';
 
@@ -34,8 +36,10 @@ if (runMode !== 'worker') {
   await app.register(listRoutes);
   await app.register(campaignRoutes, { provider, sender });
   await app.register(apiKeyRoutes);
+  await app.register(teamRoutes);
   await app.register(webhookRoutes, { provider });
   await app.listen({ port: config.port, host: '0.0.0.0' });
+  await bootstrapSuperAdmins(app.log);
 }
 
 if (sender) {

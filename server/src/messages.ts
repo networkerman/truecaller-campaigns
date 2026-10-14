@@ -4,6 +4,7 @@ import type { MessagingProvider, MessageStatus, StatusUpdate } from './providers
 const rank: Record<MessageStatus, number> = { queued: 0, sent: 1, delivered: 2, read: 3, failed: 4, blocked: 4 };
 
 export interface NewMessage {
+  workspaceId: string;
   to: string;
   senderId: string;
   category: string;
@@ -21,12 +22,12 @@ export async function insertMessage(
   error: string | null = null,
 ): Promise<string | null> {
   const { rows } = await pool.query(
-    `INSERT INTO messages (to_number, sender_id, category, body, provider, template_id, campaign_id, contact_id, status, error)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `INSERT INTO messages (to_number, sender_id, category, body, provider, template_id, campaign_id, contact_id, status, error, workspace_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      ON CONFLICT (campaign_id, contact_id) WHERE campaign_id IS NOT NULL DO NOTHING
      RETURNING id`,
     [msg.to, msg.senderId, msg.category, msg.body, provider.name, msg.templateId ?? null,
-     msg.campaignId ?? null, msg.contactId ?? null, status, error],
+     msg.campaignId ?? null, msg.contactId ?? null, status, error, msg.workspaceId],
   );
   if (!rows[0]) return null;
   await logEvent(rows[0].id, status, error ? { error } : null);
@@ -52,7 +53,7 @@ export async function deliver(provider: MessagingProvider, id: string, msg: NewM
 export async function sendMessage(provider: MessagingProvider, msg: NewMessage) {
   const id = (await insertMessage(provider, msg))!;
   await deliver(provider, id, msg);
-  return getMessage(id);
+  return getMessage(msg.workspaceId, id);
 }
 
 // Applies a delivery update. Late or out-of-order callbacks never move a message backwards.
@@ -67,11 +68,11 @@ export async function applyStatusUpdate(u: StatusUpdate) {
   return true;
 }
 
-export async function getMessage(id: string) {
+export async function getMessage(ws: string, id: string) {
   const { rows } = await pool.query(
     `SELECT id, to_number AS to, sender_id, category, template_id, campaign_id, body, status, error, created_at, updated_at
-     FROM messages WHERE id = $1`,
-    [id],
+     FROM messages WHERE id = $1 AND workspace_id = $2`,
+    [id, ws],
   );
   if (!rows[0]) return null;
   const events = await pool.query(`SELECT status, created_at FROM message_events WHERE message_id = $1 ORDER BY id`, [id]);

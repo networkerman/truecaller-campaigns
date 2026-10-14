@@ -11,19 +11,20 @@ export const config = {
     webhookSecret: env.TC_WEBHOOK_SECRET ?? '',
   },
   apiKeys: (env.API_KEYS ?? 'dev-key').split(',').map((k) => k.trim()).filter(Boolean),
-  // Who may sign up for the dashboard. Comma separated, matched against the part after @.
-  allowedEmailDomains: (env.ALLOWED_EMAIL_DOMAINS ?? 'onextel.com')
+  // OneXtel super admins: create workspaces, invite anyone, and open any workspace for support.
+  // Comma separated emails. Each gets an account and a temporary password emailed at startup if they have none.
+  superAdminEmails: (env.SUPER_ADMIN_EMAILS ?? '')
     .split(',')
-    .map((d) => d.trim().toLowerCase())
+    .map((e) => e.trim().toLowerCase())
     .filter(Boolean),
-  // Used to build the link in verification emails.
+  // Used for the sign-in link in invitation emails.
   publicUrl: (env.PUBLIC_URL ?? (env.DOMAIN ? `https://${env.DOMAIN}` : 'http://localhost:5173')).replace(/\/$/, ''),
-  // smtp(s)://user:pass@host:port. Without it, verification links are written to the server log.
+  // smtp(s)://user:pass@host:port. Without it or Tarang, invitations are written to the server log.
   smtpUrl: env.SMTP_URL ?? '',
-  // Tarang email API. When the key is set, verification emails go through Tarang instead of SMTP.
+  // Tarang email API. When the key is set, invitation emails go through Tarang instead of SMTP.
   tarangApiUrl: (env.TARANG_API_URL ?? 'https://tarang.udchowdhury.me').replace(/\/$/, ''),
   tarangApiKey: env.TARANG_API_KEY ?? '',
-  tarangVerifyTemplate: env.TARANG_VERIFY_TEMPLATE ?? 'verify-email',
+  tarangInviteTemplate: env.TARANG_INVITE_TEMPLATE ?? 'invite',
   mailFrom: env.MAIL_FROM ?? 'Truecaller Campaigns <no-reply@onextel.com>',
   // Session cookies need HTTPS. Turn off only for plain http testing away from localhost.
   secureCookies: env.COOKIE_SECURE !== 'false',
