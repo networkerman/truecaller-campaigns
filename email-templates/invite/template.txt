@@ -1,0 +1,13 @@
+Hi {{name}},
+
+{{inviterName}} invited you to the {{workspaceName}} workspace on Truecaller Campaigns as {{role}}.
+{{#if tempPassword}}
+Sign in at {{signInUrl}}
+Email: {{email}}
+Temporary password: {{tempPassword}}
+
+You'll choose your own password when you first sign in. The temporary password works for {{expiresDays}} days.
+{{else}}
+Sign in at {{signInUrl}} with your existing password, then pick {{workspaceName}} from the workspace menu.
+{{/if}}
+If you weren't expecting this, you can ignore this email.
