@@ -20,9 +20,20 @@ npm install
 npm run dev               # http://localhost:5173, proxies /v1 to the server
 ```
 
+## Dashboard accounts
+
+People sign up on the dashboard with their work email and a password. Signup is open only to
+addresses in `ALLOWED_EMAIL_DOMAINS` (default `onextel.com`, comma separated for more). A new
+account gets a confirmation link by email and can sign in once it is confirmed. Sessions are an
+httpOnly cookie that lasts 14 days.
+
+Email goes out through `SMTP_URL` (for example `smtps://USER:PASS@email-smtp.ap-south-1.amazonaws.com:465`
+for SES) from `MAIL_FROM`. Without `SMTP_URL` the confirmation link is written to the API log
+instead: `docker compose logs api | grep verification`.
+
 ## API (so far)
 
-All `/v1` calls need an `x-api-key` header.
+All `/v1` calls need an `x-api-key` header (the dashboard uses its sign-in cookie instead).
 
 | Method | Path | What it does |
 | --- | --- | --- |
@@ -41,6 +52,7 @@ All `/v1` calls need an `x-api-key` header.
 | POST | `/v1/campaigns/:id/launch`, `/v1/campaigns/:id/cancel` | Send now (or at `scheduled_at`), or stop |
 | GET | `/v1/campaigns/:id/report`, `/v1/campaigns/:id/messages.csv` | Funnel, rates and failure reasons; per-message export |
 | GET / POST | `/v1/api-keys`, `/v1/api-keys/:id/revoke` | Customer API keys (full key shown once on create) |
+| POST | `/v1/auth/signup`, `/v1/auth/login`, `/v1/auth/logout` | Dashboard accounts (no API key needed) |
 | POST | `/webhooks/truecaller` | Delivery callbacks from Truecaller |
 | GET | `/health` | Health check |
 
@@ -80,5 +92,3 @@ SSH_KEY=~/.ssh/truecaller-campaigns.pem ./deploy/push.sh ubuntu@13.232.158.14
 `push.sh` rsyncs the checkout and runs `docker compose up -d --build`. Secrets live on the box in
 `/etc/truecaller-campaigns.env` (root, 0600), created once by `deploy/setup-env.sh`, outside the
 rsync target. The database is the `pgdata` Docker volume.
-
-`infra/` holds the earlier App Runner + RDS + CloudFront setup, kept until it is destroyed.

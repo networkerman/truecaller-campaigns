@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { z } from 'zod';
-import { requireApiKey } from '../auth.js';
+import { requireAuth } from '../auth.js';
 import { config } from '../config.js';
 import { getMessage, sendMessage } from '../messages.js';
 import type { MessagingProvider } from '../providers/types.js';
@@ -20,7 +20,7 @@ const SendBody = z
   .refine((b) => Boolean(b.body) !== Boolean(b.template_id), { message: 'send either body or template_id' });
 
 export async function messageRoutes(app: FastifyInstance, opts: { provider: MessagingProvider }) {
-  app.addHook('onRequest', requireApiKey);
+  app.addHook('onRequest', requireAuth);
 
   app.post('/v1/messages', async (req, reply) => {
     const parsed = SendBody.safeParse(req.body);

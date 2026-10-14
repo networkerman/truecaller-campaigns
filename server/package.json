@@ -13,11 +13,13 @@
     "csv-parse": "^7.0.3",
     "fastify": "^5.12.5",
     "libphonenumber-js": "^1.13.15",
+    "nodemailer": "^6.10.1",
     "pg": "^8.23.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "@types/nodemailer": "^6.4.24",
     "@types/pg": "^8.23.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
