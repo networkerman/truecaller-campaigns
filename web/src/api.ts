@@ -1,50 +1,31 @@
-// The dashboard holds no key of its own: the user signs in with an API key, kept in this browser only.
-const KEY_STORE = 'tc_api_key';
-const readStored = () => {
-  try {
-    return localStorage.getItem(KEY_STORE);
-  } catch {
-    return null;
-  }
-};
-let apiKey: string | null = readStored();
+// The dashboard signs in with email and password. The server keeps the session in an
+// httpOnly cookie, so nothing secret is stored in the browser.
 let onUnauthorized: () => void = () => {};
 
-export const session = {
-  signedIn: () => Boolean(apiKey),
-  set(key: string) {
-    apiKey = key;
-    try {
-      localStorage.setItem(KEY_STORE, key);
-    } catch {
-      /* private mode: the key lasts for this page only */
-    }
-  },
-  clear() {
-    apiKey = null;
-    try {
-      localStorage.removeItem(KEY_STORE);
-    } catch {
-      /* ignore */
-    }
-  },
-  onUnauthorized: (fn: () => void) => (onUnauthorized = fn),
-};
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+}
 
-// Every request goes through here so an expired or revoked key sends the user back to sign-in.
+// Every request goes through here so an expired session sends the user back to sign-in.
 async function request(path: string, init: RequestInit = {}) {
-  const res = await fetch(path, { ...init, headers: { ...init.headers, 'x-api-key': apiKey ?? '' } });
-  if (res.status === 401) {
-    session.clear();
-    onUnauthorized();
-  }
+  const res = await fetch(path, { ...init, credentials: 'same-origin' });
+  if (res.status === 401 && !path.startsWith('/v1/auth/')) onUnauthorized();
   return res;
 }
 
-export async function checkKey(key: string) {
-  const res = await fetch('/v1/templates', { headers: { 'x-api-key': key } });
-  return res.ok;
-}
+export const auth = {
+  onUnauthorized: (fn: () => void) => (onUnauthorized = fn),
+  me: async (): Promise<User | null> => {
+    const res = await request('/v1/auth/me');
+    return res.ok ? res.json() : null;
+  },
+  login: (email: string, password: string) => call<{ ok: true }>('POST', '/v1/auth/login', { email, password }),
+  signup: (name: string, email: string, password: string) =>
+    call<{ email: string }>('POST', '/v1/auth/signup', { name, email, password }),
+  logout: () => call<void>('POST', '/v1/auth/logout'),
+};
 
 export type Category = 'promotional' | 'transactional' | 'service';
 export type TemplateStatus = 'draft' | 'submitted' | 'approved' | 'rejected';

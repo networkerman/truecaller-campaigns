@@ -173,6 +173,10 @@ a.btn { text-decoration: none; color: inherit; display: inline-block; }
 .sidebar { display: flex; flex-direction: column; }
 .signout { margin-top: auto; background: none; border: 0; color: #94a3b8; font: inherit; text-align: left; padding: 9px 10px; cursor: pointer; }
 .signout:hover { color: #fff; }
+.whoami { margin-top: auto; padding: 9px 10px 0; color: #cbd5e1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.whoami + .signout { margin-top: 0; }
+.signin-card .field .small { font-weight: 400; }
+.signin-card .switch { margin: 16px 0 0; text-align: center; }
 .topnav { display: none; }
 .signin { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
 .signin-card { width: min(380px, 100%); padding: 28px; overflow: visible; }

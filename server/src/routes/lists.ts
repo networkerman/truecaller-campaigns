@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { requireApiKey } from '../auth.js';
+import { requireAuth } from '../auth.js';
 import { pool } from '../db.js';
 import { checkRecords, createList, deleteList, getList, importRecords, listLists, normalizePhone, sampleContacts } from '../lists.js';
 import { MAX_AUDIENCE_BYTES, SourceError, XLSX_TYPE, readFile, rowsFromLink } from '../sources.js';
@@ -23,7 +23,7 @@ async function rowsFromRequest(body: unknown): Promise<string[][] | { error: str
 }
 
 export async function listRoutes(app: FastifyInstance) {
-  app.addHook('onRequest', requireApiKey);
+  app.addHook('onRequest', requireAuth);
   app.addContentTypeParser(['text/csv', 'text/plain'], { parseAs: 'string', bodyLimit: MAX_AUDIENCE_BYTES }, (_req, body, done) =>
     done(null, body),
   );

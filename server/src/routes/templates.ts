@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { requireApiKey } from '../auth.js';
+import { requireAuth } from '../auth.js';
 import { config } from '../config.js';
 import {
   createTemplate,
@@ -20,7 +20,7 @@ const TemplateBody = z.object({
 const Id = z.object({ id: z.string().uuid() });
 
 export async function templateRoutes(app: FastifyInstance) {
-  app.addHook('onRequest', requireApiKey);
+  app.addHook('onRequest', requireAuth);
 
   app.get('/v1/templates', async () => ({ data: await listTemplates() }));
 
