@@ -1,0 +1,8 @@
+Hi {{name}},
+
+Your email is confirmed and your account is ready.
+1. Upload a contact list
+2. Pick a template and create a campaign
+3. Watch delivery in Reports
+
+{{appUrl}}

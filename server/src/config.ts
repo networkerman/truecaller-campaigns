@@ -20,6 +20,10 @@ export const config = {
   publicUrl: (env.PUBLIC_URL ?? (env.DOMAIN ? `https://${env.DOMAIN}` : 'http://localhost:5173')).replace(/\/$/, ''),
   // smtp(s)://user:pass@host:port. Without it, verification links are written to the server log.
   smtpUrl: env.SMTP_URL ?? '',
+  // Tarang email API. When the key is set, verification emails go through Tarang instead of SMTP.
+  tarangApiUrl: (env.TARANG_API_URL ?? 'https://tarang.udchowdhury.me').replace(/\/$/, ''),
+  tarangApiKey: env.TARANG_API_KEY ?? '',
+  tarangVerifyTemplate: env.TARANG_VERIFY_TEMPLATE ?? 'verify-email',
   mailFrom: env.MAIL_FROM ?? 'Truecaller Campaigns <no-reply@onextel.com>',
   // Session cookies need HTTPS. Turn off only for plain http testing away from localhost.
   secureCookies: env.COOKIE_SECURE !== 'false',
