@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { generateKey, requireApiKey } from '../auth.js';
+import { generateKey, requireAuth } from '../auth.js';
 import { pool } from '../db.js';
 
 export async function apiKeyRoutes(app: FastifyInstance) {
-  app.addHook('onRequest', requireApiKey);
+  app.addHook('onRequest', requireAuth);
 
   app.get('/v1/api-keys', async () => {
     const { rows } = await pool.query(
