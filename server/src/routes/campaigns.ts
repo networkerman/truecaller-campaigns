@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { requireApiKey } from '../auth.js';
+import { requireAuth } from '../auth.js';
 import {
   campaignMessagesCsv,
   campaignReport,
@@ -27,7 +27,7 @@ const CreateBody = z.object({
 });
 
 export async function campaignRoutes(app: FastifyInstance, opts: { provider: MessagingProvider; sender: boolean }) {
-  app.addHook('onRequest', requireApiKey);
+  app.addHook('onRequest', requireAuth);
   // When the sender runs in this process, start the first batch right away instead of waiting for the next tick.
   const kick = () => {
     if (opts.sender) void tick(opts.provider).catch((err) => app.log.error(err, 'campaign tick failed'));

@@ -6,6 +6,7 @@ import { applyStatusUpdate } from './messages.js';
 import { createMockProvider } from './providers/mock.js';
 import { createTruecallerProvider } from './providers/truecaller.js';
 import { apiKeyRoutes } from './routes/apiKeys.js';
+import { authRoutes } from './routes/auth.js';
 import { campaignRoutes } from './routes/campaigns.js';
 import { listRoutes } from './routes/lists.js';
 import { messageRoutes } from './routes/messages.js';
@@ -27,6 +28,7 @@ if (runMode !== 'worker') {
     await pool.query('SELECT 1');
     return { ok: true, provider: provider.name };
   });
+  await app.register(authRoutes);
   await app.register(messageRoutes, { provider });
   await app.register(templateRoutes);
   await app.register(listRoutes);
@@ -37,8 +39,8 @@ if (runMode !== 'worker') {
 }
 
 if (sender) {
-  // Campaign sender: one batch per second per running campaign. Runs on an always-on
-  // worker in production, because App Runner throttles CPU between requests.
+  // Campaign sender: one batch per second per running campaign. In production this is the
+  // always-on worker container, so scheduled campaigns start on time with nobody on the dashboard.
   app.log.info({ runMode }, 'campaign sender started');
   let current: Promise<void> = Promise.resolve();
   const timer = setInterval(() => {
