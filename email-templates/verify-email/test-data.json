@@ -1,0 +1,6 @@
+{
+  "name": "Udayan",
+  "link": "https://truecaller.udchowdhury.me/v1/auth/verify?token=abc123",
+  "expiresHours": 24,
+  "appUrl": "https://truecaller.udchowdhury.me"
+}

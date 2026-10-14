@@ -1,0 +1,16 @@
+{
+  "name": "Udayan",
+  "campaign": {
+    "name": "Diwali offer",
+    "finishedAt": "14 Oct 2026, 18:20 IST",
+    "reportUrl": "https://truecaller.udchowdhury.me/campaigns/42"
+  },
+  "stats": {
+    "total": 10000,
+    "sent": 9980,
+    "delivered": 9712,
+    "read": 6120,
+    "failed": 268
+  },
+  "appUrl": "https://truecaller.udchowdhury.me"
+}

@@ -1,0 +1,6 @@
+Hi {{name}},
+
+Confirm your email to finish signing up for Truecaller Campaigns:
+{{link}}
+
+The link works for {{expiresHours}} hours. If you didn't sign up, ignore this email.
