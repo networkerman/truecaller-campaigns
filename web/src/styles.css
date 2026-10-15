@@ -208,3 +208,7 @@ a.btn { text-decoration: none; color: inherit; display: inline-block; }
 .st-analyst { background: #f2f4f7; color: #475467; }
 .st-pending { background: var(--warn-bg); color: var(--warn); }
 .role-select { width: auto; padding: 4px 8px; }
+
+/* ---- test mode ---- */
+.banner.test-mode { background: #fff4e5; color: #7a4100; border: 1px solid #f5c27a; }
+.simulated { margin: 0 0 10px; font-size: 12px; font-weight: 600; color: #7a4100; background: #fff4e5; border-radius: 6px; padding: 4px 8px; display: inline-block; }

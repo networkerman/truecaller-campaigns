@@ -6,6 +6,7 @@ import { ListsPage } from './ListsPage';
 import { ReportsPage } from './ReportsPage';
 import { TeamPage } from './TeamPage';
 import { TemplatesPage } from './TemplatesPage';
+import { useTestMode } from './testMode';
 import { WorkspacesPage } from './WorkspacesPage';
 
 // `need` hides a section from roles that can't use it; `superAdmin` sections are OneXtel-only.
@@ -30,6 +31,7 @@ export function App() {
   const [route, setRoute] = useState(parse);
   // undefined while checking the session cookie, null when signed out.
   const [user, setUser] = useState<User | null | undefined>(undefined);
+  const testMode = useTestMode();
   const loadUser = () => auth.me().then(setUser, () => setUser(null));
   useEffect(() => {
     const on = () => setRoute(parse());
@@ -95,6 +97,12 @@ export function App() {
       </aside>
       <nav className="topnav" aria-label="Sections">{links}</nav>
       <main className="content" key={ws.id}>
+        {testMode && (
+          <div className="banner test-mode" role="status">
+            <strong>Test mode.</strong> Messages are simulated and nothing is sent to phones. Delivered and read
+            results are generated automatically, and submitted templates are approved without Truecaller review.
+          </div>
+        )}
         {ws.support && <div className="banner warn">You're in {ws.name} with support access. What you do here is recorded in its audit log.</div>}
         {page === 'campaigns' && <CampaignsPage />}
         {page === 'templates' && <TemplatesPage />}
