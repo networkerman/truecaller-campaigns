@@ -65,7 +65,8 @@ All `/v1` calls need an `x-api-key` header (the dashboard uses its sign-in cooki
 | POST | `/v1/templates/:id/preview` | Render with `{ "values": {...} }` |
 | GET / POST | `/v1/lists` | List or create contact lists |
 | GET / DELETE | `/v1/lists/:id` | List details with a contact sample, or delete it (blocked once a campaign uses it) |
-| POST | `/v1/lists/:id/contacts` | Upload contacts: raw CSV body with `Content-Type: text/csv`. Needs a phone column; other columns become `{{variables}}` |
+| POST | `/v1/lists/:id/contacts` | Add contacts from a raw CSV body (`text/csv`), a raw `.xlsx` body, or JSON `{ "source": "sheet" \| "url", "url": "..." }` for a public Google Sheet or CSV link. Needs a phone column (`phone`, `mobile`, `truecaller`, …); other columns become `{{variables}}`. Max 50 MB |
+| POST | `/v1/lists/validate` | Same inputs, checks them without saving: valid and invalid counts, columns, a short preview |
 | POST / DELETE | `/v1/opt-outs`, `/v1/opt-outs/:phone` | The workspace's opt-out list; opted-out numbers never get its campaign messages |
 | GET / POST | `/v1/campaigns` | List or create campaigns (`name`, `template_id`, `list_id`, optional `sender_id`, `launch`, `scheduled_at`) |
 | GET / DELETE | `/v1/campaigns/:id` | Campaign with live counts, or delete a draft |
