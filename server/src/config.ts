@@ -28,6 +28,11 @@ export const config = {
   tarangApiUrl: (env.TARANG_API_URL ?? 'https://tarang.udchowdhury.me').replace(/\/$/, ''),
   tarangApiKey: env.TARANG_API_KEY ?? '',
   tarangInviteTemplate: env.TARANG_INVITE_TEMPLATE ?? 'invite',
+  // Customer webhooks may not point at private addresses. Turn on only for local testing.
+  webhookAllowPrivate: env.WEBHOOK_ALLOW_PRIVATE === 'true',
+  // Shown on the Senders page: who registers new Truecaller senders for customers.
+  senderContactName: env.SENDER_CONTACT_NAME ?? 'your OneXtel account manager',
+  senderContactEmail: env.SENDER_CONTACT_EMAIL ?? '',
   mailFrom: env.MAIL_FROM ?? 'Truecaller Campaigns <no-reply@onextel.com>',
   // Session cookies need HTTPS. Turn off only for plain http testing away from localhost.
   secureCookies: env.COOKIE_SECURE !== 'false',

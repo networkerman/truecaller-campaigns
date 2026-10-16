@@ -13,6 +13,7 @@ import {
 } from '../campaigns.js';
 import { config } from '../config.js';
 import { pool } from '../db.js';
+import { checkSender } from './senders.js';
 import type { MessagingProvider } from '../providers/types.js';
 
 const Id = z.object({ id: z.string().uuid() });
@@ -50,7 +51,9 @@ export async function campaignRoutes(app: FastifyInstance, opts: { provider: Mes
     if (!refs.rows[0].t) return reply.code(400).send({ error: 'template not found' });
     if (!refs.rows[0].l) return reply.code(400).send({ error: 'contact list not found' });
 
-    const c = await createCampaign(req.ctx.workspaceId, { name: b.name, templateId: b.template_id, listId: b.list_id, senderId: b.sender_id ?? config.tc.senderId });
+    const sender = await checkSender(req.ctx.workspaceId, b.sender_id);
+    if ('error' in sender) return reply.code(400).send({ error: sender.error });
+    const c = await createCampaign(req.ctx.workspaceId, { name: b.name, templateId: b.template_id, listId: b.list_id, senderId: sender.senderId });
     if (!b.launch) return reply.code(201).send(c);
     const res = await launchCampaign(req.ctx.workspaceId, c.id, b.scheduled_at ? new Date(b.scheduled_at) : null);
     if ('error' in res) return reply.code(res.status!).send({ error: res.error, campaign: c });

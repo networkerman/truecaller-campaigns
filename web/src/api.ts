@@ -246,3 +246,91 @@ export const admin = {
   createWorkspace: (b: { name: string; owner_email: string; owner_name: string }) =>
     call<WorkspaceRow>('POST', '/v1/admin/workspaces', b),
 };
+
+// ---- Customer webhooks ----
+
+export type WebhookEvent = 'message.sent' | 'message.delivered' | 'message.read' | 'message.failed' | 'campaign.started' | 'campaign.completed';
+
+export interface Webhook {
+  id: string;
+  url: string;
+  description: string;
+  events: WebhookEvent[];
+  enabled: boolean;
+  secret: string;
+  created_at: string;
+  updated_at: string;
+  failed_24h: number;
+  last_delivered_at: string | null;
+}
+
+export type WebhookInput = Pick<Webhook, 'url' | 'description' | 'events' | 'enabled'>;
+
+export interface WebhookDelivery {
+  id: string;
+  event: string;
+  status: 'pending' | 'delivered' | 'failed';
+  attempts: number;
+  response_code: number | null;
+  last_error: string | null;
+  created_at: string;
+  delivered_at: string | null;
+  next_attempt_at: string | null;
+  payload?: unknown;
+}
+
+export const webhooks = {
+  all: () => call<{ data: Webhook[]; events: WebhookEvent[]; max_attempts: number }>('GET', '/v1/webhooks'),
+  create: (w: WebhookInput) => call<Webhook>('POST', '/v1/webhooks', w),
+  update: (id: string, w: WebhookInput) => call<Webhook>('PUT', `/v1/webhooks/${id}`, w),
+  remove: (id: string) => call<void>('DELETE', `/v1/webhooks/${id}`),
+  rotate: (id: string) => call<Webhook>('POST', `/v1/webhooks/${id}/rotate-secret`),
+  test: (id: string) => call<WebhookDelivery>('POST', `/v1/webhooks/${id}/test`),
+  deliveries: (id: string, status?: string) =>
+    call<{ data: WebhookDelivery[] }>('GET', `/v1/webhooks/${id}/deliveries${status ? `?status=${status}` : ''}`).then((r) => r.data),
+  retry: (deliveryId: string) => call<WebhookDelivery>('POST', `/v1/webhooks/deliveries/${deliveryId}/retry`, {}),
+};
+
+// ---- Senders ----
+
+export interface Sender {
+  id: string;
+  sender_id: string;
+  display_name: string;
+  category: Category;
+  status: 'active' | 'paused';
+  created_at: string;
+}
+
+export interface SenderRequest {
+  id: string;
+  display_name: string;
+  legal_name: string;
+  category: Category;
+  website: string;
+  use_case: string;
+  monthly_volume: string;
+  status: 'submitted' | 'in_review' | 'approved' | 'rejected';
+  note: string | null;
+  requested_by: string | null;
+  created_at: string;
+}
+
+export type SenderRequestInput = Pick<SenderRequest, 'display_name' | 'legal_name' | 'category' | 'website' | 'use_case' | 'monthly_volume'>;
+
+export interface SendersResponse {
+  data: Sender[];
+  requests: SenderRequest[];
+  default_sender: string;
+  contact: { name: string; email: string | null };
+  can_manage: boolean;
+}
+
+export const senders = {
+  all: () => call<SendersResponse>('GET', '/v1/senders'),
+  request: (r: SenderRequestInput) => call<SenderRequest>('POST', '/v1/senders/requests', r),
+  add: (s: Pick<Sender, 'sender_id' | 'display_name' | 'category'>) => call<Sender>('POST', '/v1/senders', s),
+  setStatus: (id: string, status: Sender['status']) => call<Sender>('PATCH', `/v1/senders/${id}`, { status }),
+  setRequestStatus: (id: string, status: SenderRequest['status'], note?: string) =>
+    call<SenderRequest>('PATCH', `/v1/senders/requests/${id}`, { status, note }),
+};

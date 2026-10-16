@@ -137,3 +137,35 @@ function download(href: string, redirects = 5): Promise<{ body: Buffer; type: st
     req.on('error', (err) => reject(err instanceof SourceError ? err : new SourceError(`Could not open the link: ${err.message}`)));
   });
 }
+
+// POSTs a webhook to a customer's URL with the same private-address guard as link imports.
+// allowPrivate is for local testing only (WEBHOOK_ALLOW_PRIVATE=true).
+export function postJson(href: string, body: string, headers: Record<string, string>, allowPrivate = false): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(href);
+    const ipFamily = isIP(url.hostname);
+    if (!allowPrivate && ipFamily && blocked.check(url.hostname, ipFamily === 6 ? 'ipv6' : 'ipv4')) {
+      return reject(new SourceError('The URL points to a private address.'));
+    }
+    const client = url.protocol === 'https:' ? https : http;
+    const req = client.request(
+      url,
+      {
+        method: 'POST',
+        lookup: allowPrivate ? undefined : safeLookup,
+        timeout: 10_000,
+        headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), 'user-agent': 'onextel-truecaller-webhooks', ...headers },
+      },
+      (res) => {
+        let text = '';
+        res.setEncoding('utf8');
+        res.on('data', (c: string) => { if (text.length < 1000) text += c; });
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, body: text.slice(0, 1000) }));
+        res.on('error', reject);
+      },
+    );
+    req.on('timeout', () => req.destroy(new SourceError('No response within 10 seconds.')));
+    req.on('error', (err) => reject(err instanceof SourceError ? err : new SourceError(err.message)));
+    req.end(body);
+  });
+}

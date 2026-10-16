@@ -79,10 +79,24 @@ All `/v1` calls need an `x-api-key` header (the dashboard uses its sign-in cooki
 | PATCH / DELETE | `/v1/team/members/:userId` | Change a role or remove someone; `POST …/resend` for a new temporary password |
 | GET | `/v1/audit` | The workspace's audit log |
 | GET / POST | `/v1/admin/workspaces` | Super admins: all workspaces; create one with its Owner |
+| GET / POST | `/v1/webhooks` | Your webhook endpoints (`url`, `events`, `description`, `enabled`); dashboard only, same roles as API keys |
+| PUT / DELETE | `/v1/webhooks/:id` | Edit or delete an endpoint; `POST …/rotate-secret`, `POST …/test` |
+| GET | `/v1/webhooks/:id/deliveries?status=` | Delivery log; `POST /v1/webhooks/deliveries/:id/retry` sends one again |
+| GET | `/v1/senders` | Active senders, sender requests and who to contact |
+| POST | `/v1/senders/requests` | Ask OneXtel to register a new sender |
+| POST / PATCH | `/v1/senders`, `/v1/senders/:id`, `/v1/senders/requests/:id` | Super admins: add or pause a verified sender, update a request |
 | POST | `/webhooks/truecaller` | Delivery callbacks from Truecaller |
 | GET | `/health` | Health check |
 
 Statuses move forward only: `queued → sent → delivered → read`, or end in `failed` / `blocked`.
+
+## Webhooks
+
+Add endpoints on the dashboard's Webhooks page. Events: `message.sent`, `message.delivered`, `message.read`, `message.failed`, `campaign.started`, `campaign.completed`. Each POST has `x-onextel-event`, `x-onextel-delivery` and `x-onextel-signature: t=TIMESTAMP,v1=HMAC_SHA256(secret, "TIMESTAMP.BODY")`. Anything but a 2xx within 10 seconds is retried after 1 min, 5 min, 30 min, 2 h and 6 h, then marked failed. Failed deliveries can be retried from the log.
+
+## Senders
+
+Truecaller senders are registered by OneXtel by hand. Customers request one on the Senders page; a super admin adds it once Truecaller has verified it. A workspace with senders can only send from its active ones. One without any uses `TC_SENDER_ID`.
 
 ## Campaign guardrails
 
