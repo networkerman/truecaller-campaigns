@@ -65,7 +65,8 @@ All `/v1` calls need an `x-api-key` header (the dashboard uses its sign-in cooki
 | POST | `/v1/templates/:id/preview` | Render with `{ "values": {...} }` |
 | GET / POST | `/v1/lists` | List or create contact lists |
 | GET / DELETE | `/v1/lists/:id` | List details with a contact sample, or delete it (blocked once a campaign uses it) |
-| POST | `/v1/lists/:id/contacts` | Upload contacts: raw CSV body with `Content-Type: text/csv`. Needs a phone column; other columns become `{{variables}}` |
+| POST | `/v1/lists/:id/contacts` | Add contacts from a raw CSV body (`text/csv`), a raw `.xlsx` body, or JSON `{ "source": "sheet" \| "url", "url": "..." }` for a public Google Sheet or CSV link. Needs a phone column (`phone`, `mobile`, `truecaller`, …); other columns become `{{variables}}`. Max 50 MB |
+| POST | `/v1/lists/validate` | Same inputs, checks them without saving: valid and invalid counts, columns, a short preview |
 | POST / DELETE | `/v1/opt-outs`, `/v1/opt-outs/:phone` | The workspace's opt-out list; opted-out numbers never get its campaign messages |
 | GET / POST | `/v1/campaigns` | List or create campaigns (`name`, `template_id`, `list_id`, optional `sender_id`, `launch`, `scheduled_at`) |
 | GET / DELETE | `/v1/campaigns/:id` | Campaign with live counts, or delete a draft |
@@ -78,10 +79,24 @@ All `/v1` calls need an `x-api-key` header (the dashboard uses its sign-in cooki
 | PATCH / DELETE | `/v1/team/members/:userId` | Change a role or remove someone; `POST …/resend` for a new temporary password |
 | GET | `/v1/audit` | The workspace's audit log |
 | GET / POST | `/v1/admin/workspaces` | Super admins: all workspaces; create one with its Owner |
+| GET / POST | `/v1/webhooks` | Your webhook endpoints (`url`, `events`, `description`, `enabled`); dashboard only, same roles as API keys |
+| PUT / DELETE | `/v1/webhooks/:id` | Edit or delete an endpoint; `POST …/rotate-secret`, `POST …/test` |
+| GET | `/v1/webhooks/:id/deliveries?status=` | Delivery log; `POST /v1/webhooks/deliveries/:id/retry` sends one again |
+| GET | `/v1/senders` | Active senders, sender requests and who to contact |
+| POST | `/v1/senders/requests` | Ask OneXtel to register a new sender |
+| POST / PATCH | `/v1/senders`, `/v1/senders/:id`, `/v1/senders/requests/:id` | Super admins: add or pause a verified sender, update a request |
 | POST | `/webhooks/truecaller` | Delivery callbacks from Truecaller |
 | GET | `/health` | Health check |
 
 Statuses move forward only: `queued → sent → delivered → read`, or end in `failed` / `blocked`.
+
+## Webhooks
+
+Add endpoints on the dashboard's Webhooks page. Events: `message.sent`, `message.delivered`, `message.read`, `message.failed`, `campaign.started`, `campaign.completed`. Each POST has `x-onextel-event`, `x-onextel-delivery` and `x-onextel-signature: t=TIMESTAMP,v1=HMAC_SHA256(secret, "TIMESTAMP.BODY")`. Anything but a 2xx within 10 seconds is retried after 1 min, 5 min, 30 min, 2 h and 6 h, then marked failed. Failed deliveries can be retried from the log.
+
+## Senders
+
+Truecaller senders are registered by OneXtel by hand. Customers request one on the Senders page; a super admin adds it once Truecaller has verified it. A workspace with senders can only send from its active ones. One without any uses `TC_SENDER_ID`.
 
 ## Campaign guardrails
 
@@ -95,7 +110,15 @@ Skipped and failed contacts show up in the campaign report with the reason.
 ## Providers
 
 `TC_PROVIDER=mock` simulates the channel (delivered, then read; numbers ending in `0000` fail).
-`TC_PROVIDER=truecaller` uses the real API in `server/src/providers/truecaller.ts`.
+`TC_PROVIDER=truecaller` sends through Truecaller's Business Chat API v2 (gRPC service
+`truecaller.messenger.business.v2.BusinessApi`, method `BusinessSendMessage`) in
+`server/src/providers/truecaller.ts`. Each send uses our message id as `deduplication_id`, so a
+retry is never delivered twice. Delivery and read updates arrive on `POST /webhooks/truecaller`
+(v2 has no streaming subscription).
+
+The v2 `.proto` files come from Truecaller's partner portal and are not in this repo. Locally put
+them in `server/proto/`; on the box copy them to `/opt/truecaller-proto/`, which is mounted into
+the containers. Set `TC_API_BASE_URL` (gRPC host:port) and `TC_API_KEY`, then `TC_PROVIDER=truecaller`.
 
 ## Deploy
 

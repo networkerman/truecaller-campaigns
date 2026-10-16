@@ -53,7 +53,7 @@ export function ApiKeysPage() {
         <pre>{`curl -X POST ${location.origin}/v1/messages \\
   -H "x-api-key: YOUR_KEY" -H "content-type: application/json" \\
   -d '{"to":"9876543210","template_id":"TEMPLATE_ID","variables":{"name":"Asha"}}'`}</pre>
-        <p className="hint">Other endpoints: /v1/templates, /v1/lists (CSV upload with Content-Type: text/csv), /v1/campaigns, /v1/campaigns/:id/report.</p>
+        <p className="hint">Other endpoints: /v1/templates, /v1/lists (CSV upload with Content-Type: text/csv), /v1/campaigns, /v1/campaigns/:id/report. To get delivery and read updates pushed to you, add an endpoint on the <a className="link" href="#/webhooks">Webhooks</a> page.</p>
       </section>
 
       {creating && (

@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
-import { api, campaigns, lists, type Campaign, type ContactList, type Template } from './api';
+import { useRef, useState } from 'react';
+import { api, campaigns, lists, senders, type Campaign, type ContactList, type SendersResponse, type Template } from './api';
+import { AudiencePicker, audienceSource, emptyAudience, type Audience } from './Audience';
 import { Drawer, Funnel, PageHead, fmt, useAsync, usePoll, when } from './ui';
 
 const LIVE = ['running', 'scheduled'];
@@ -66,23 +67,40 @@ export function CampaignsPage() {
 function NewCampaign({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [allLists, setLists] = useState<ContactList[]>([]);
-  const [form, setForm] = useState({ name: '', template_id: '', list_id: '', sender_id: '', when: 'now', at: '' });
+  const [senderInfo, setSenderInfo] = useState<SendersResponse | null>(null);
+  const [form, setForm] = useState({ name: '', template_id: '', sender_id: '', when: 'now', at: '' });
+  const [audience, setAudience] = useState<Audience>(emptyAudience);
+  // Keeps the list made from an upload, so a retry after an error doesn't import it twice.
+  const imported = useRef<{ from: Audience; listId: string } | null>(null);
   const { busy, error, run, setError } = useAsync();
   usePoll(() => {
     api.listTemplates().then(setTemplates);
     lists.all().then(setLists);
+    senders.all().then(setSenderInfo, () => {});
   }, 0, false);
+  const activeSenders = senderInfo?.data.filter((x) => x.status === 'active') ?? [];
 
   const t = templates.find((x) => x.id === form.template_id);
-  const l = allLists.find((x) => x.id === form.list_id);
-  const missing = useMemo(() => (t && l ? t.variables.filter((v) => !l.columns.includes(v)) : []), [t, l]);
-  const ready = form.name.trim() && t && l && (form.when === 'now' || form.at);
+  const cohort = audience.mode === 'cohort' ? allLists.find((x) => x.id === audience.listId) : undefined;
+  const recipients = cohort ? cohort.contact_count : audience.check?.valid ?? 0;
+  const ready = form.name.trim() && t && (cohort || recipients > 0) && (form.when === 'now' || form.at);
+
+  // A cohort is used as is. Any other source becomes a new contact list named after the campaign.
+  const resolveList = async () => {
+    if (cohort) return cohort.id;
+    if (imported.current?.from === audience) return imported.current.listId;
+    const list = await lists.create(`${form.name.trim()} · ${new Date().toLocaleString('en-IN')}`);
+    await lists.importFrom(list.id, audienceSource(audience)!);
+    imported.current = { from: audience, listId: list.id };
+    return list.id;
+  };
 
   const create = (launch: boolean) =>
     run(async () => {
       if (launch && form.when === 'later' && new Date(form.at).getTime() <= Date.now()) return setError('Pick a time in the future');
-      if (launch && !confirm(form.when === 'now' ? `Send to ${fmt(l!.contact_count)} contacts now?` : `Schedule for ${new Date(form.at).toLocaleString()}?`)) return;
-      const c = await campaigns.create({ name: form.name.trim(), template_id: form.template_id, list_id: form.list_id, sender_id: form.sender_id.trim() || undefined });
+      if (launch && !confirm(form.when === 'now' ? `Send to ${fmt(recipients)} contacts now?` : `Schedule for ${new Date(form.at).toLocaleString()}?`)) return;
+      const list_id = await resolveList();
+      const c = await campaigns.create({ name: form.name.trim(), template_id: form.template_id, list_id, sender_id: form.sender_id.trim() || undefined });
       if (launch) await campaigns.launch(c.id, form.when === 'later' ? new Date(form.at).toISOString() : undefined);
       onCreated(c.id);
     });
@@ -119,16 +137,19 @@ function NewCampaign({ onClose, onCreated }: { onClose: () => void; onCreated: (
           </select>
           {templates.length > 0 && !templates.some((x) => x.status === 'approved') && <span className="hint bad">No approved templates yet. Submit one on the Templates page.</span>}
         </label>
+        <AudiencePicker value={audience} onChange={setAudience} cohorts={allLists} variables={t?.variables ?? []} />
         <label>
-          Contact list
-          <select className="input" value={form.list_id} onChange={(e) => setForm({ ...form, list_id: e.target.value })}>
-            <option value="">Choose a list</option>
-            {allLists.map((x) => <option key={x.id} value={x.id}>{x.name} ({fmt(x.contact_count)} contacts)</option>)}
-          </select>
-        </label>
-        <label>
-          Sender ID <span className="hint">Optional, uses the default sender if empty</span>
-          <input className="input" value={form.sender_id} onChange={(e) => setForm({ ...form, sender_id: e.target.value })} />
+          Sender
+          {activeSenders.length ? (
+            <select className="input" value={form.sender_id || activeSenders[0].sender_id} onChange={(e) => setForm({ ...form, sender_id: e.target.value })}>
+              {activeSenders.map((x) => (
+                <option key={x.id} value={x.sender_id}>{x.display_name} ({x.sender_id})</option>
+              ))}
+            </select>
+          ) : (
+            <input className="input" disabled value={senderInfo ? `${senderInfo.default_sender} (platform default)` : ''} />
+          )}
+          <span className="hint">Need a different sender? <a className="link" href="#/senders">Request one</a>.</span>
         </label>
         <fieldset className="choice">
           <label className="inline"><input type="radio" checked={form.when === 'now'} onChange={() => setForm({ ...form, when: 'now' })} /> Send now</label>
@@ -139,11 +160,6 @@ function NewCampaign({ onClose, onCreated }: { onClose: () => void; onCreated: (
         {t && (
           <div className="bubble preview-bubble">
             {t.body.replace(VARS, (_, v: string) => `[${v}]`)}
-          </div>
-        )}
-        {missing.length > 0 && (
-          <div className="banner warn">
-            This list has no column for {missing.map((m) => `{{${m}}}`).join(', ')}. Those contacts will fail with a missing value.
           </div>
         )}
         {t?.category === 'promotional' && (

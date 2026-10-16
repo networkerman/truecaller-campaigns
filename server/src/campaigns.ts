@@ -2,6 +2,7 @@ import { guardrails, sendRate } from './config.js';
 import { pool } from './db.js';
 import { deliver, insertMessage, type NewMessage } from './messages.js';
 import type { MessagingProvider } from './providers/types.js';
+import { emitCampaignEvent } from './customerWebhooks.js';
 import { render } from './templates.js';
 
 // Truecaller counts days in Indian time.
@@ -52,6 +53,7 @@ export async function launchCampaign(ws: string, id: string, scheduledAt: Date |
     `UPDATE campaigns SET status = $2, scheduled_at = $3, started_at = $4, updated_at = now() WHERE id = $1`,
     [id, later ? 'scheduled' : 'running', later ? scheduledAt : null, later ? null : new Date()],
   );
+  if (!later) await emitCampaignEvent(id, 'campaign.started');
   return { campaign: await getCampaign(ws, id) };
 }
 
@@ -117,10 +119,11 @@ export async function tick(provider: MessagingProvider, batchSize = sendRate) {
   if (ticking) return;
   ticking = true;
   try {
-    await pool.query(
+    const { rows: started } = await pool.query(
       `UPDATE campaigns SET status = 'running', started_at = now(), updated_at = now()
-       WHERE status = 'scheduled' AND scheduled_at <= now()`,
+       WHERE status = 'scheduled' AND scheduled_at <= now() RETURNING id`,
     );
+    for (const { id } of started) await emitCampaignEvent(id, 'campaign.started');
     const { rows } = await pool.query(`SELECT id FROM campaigns WHERE status = 'running' ORDER BY started_at`);
     for (const { id } of rows) await sendBatch(provider, id, batchSize);
   } finally {
@@ -169,11 +172,12 @@ async function sendBatch(provider: MessagingProvider, campaignId: string, batchS
   if (batch.length === 0) {
     const pending = await pool.query(`SELECT 1 FROM messages WHERE campaign_id = $1 AND status = 'queued' LIMIT 1`, [c.id]);
     if (!pending.rowCount) {
-      await pool.query(
+      const done = await pool.query(
         `UPDATE campaigns SET status = 'completed', completed_at = now(), note = NULL, updated_at = now()
          WHERE id = $1 AND status = 'running'`,
         [c.id],
       );
+      if (done.rowCount) await emitCampaignEvent(c.id, 'campaign.completed');
     }
     return;
   }
