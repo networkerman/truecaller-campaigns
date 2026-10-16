@@ -1,0 +1,7 @@
+Hi {{name}},
+
+Your campaign "{{campaign.name}}" stopped at {{campaign.stoppedAt}} after sending to {{stats.sent}} of {{stats.total}} recipients.
+
+Reason: {{reason}}
+
+Nobody else on the list was messaged. Fix the cause and resume it: {{campaign.url}}

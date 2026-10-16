@@ -2,28 +2,23 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   SESSION_COOKIE,
+  audit,
   checkPassword,
   createSession,
   hashKey,
   hashPassword,
-  newToken,
+  isSuperAdmin,
   readCookie,
+  resolveWorkspace,
   sessionCookie,
   sessionUser,
 } from '../auth.js';
-import { config } from '../config.js';
 import { pool } from '../db.js';
-import { sendVerificationEmail } from '../mailer.js';
 
+// There is no public signup: accounts come from invitations (see routes/team.ts and routes/admin.ts).
 const email = z.string().trim().toLowerCase().email().max(200);
-const signupBody = z.object({
-  name: z.string().trim().min(1).max(100),
-  email,
-  password: z.string().min(8).max(200),
-});
 const loginBody = z.object({ email, password: z.string().min(1).max(200) });
-
-const domainAllowed = (address: string) => config.allowedEmailDomains.includes(address.split('@')[1] ?? '');
+const passwordBody = z.object({ current_password: z.string().min(1).max(200), new_password: z.string().min(10).max(200) });
 
 // Slows down password guessing: 10 failed sign-ins per email per 15 minutes.
 const failures = new Map<string, { count: number; until: number }>();
@@ -39,73 +34,28 @@ const fail = (key: string) => {
 };
 
 export async function authRoutes(app: FastifyInstance) {
-  app.post('/v1/auth/signup', async (req, reply) => {
-    const parsed = signupBody.safeParse(req.body);
-    if (!parsed.success) {
-      return reply.code(400).send({ error: 'Enter your name, a valid email and a password of at least 8 characters.' });
-    }
-    const { name, email, password } = parsed.data;
-    if (!domainAllowed(email)) {
-      return reply.code(403).send({ error: `Signup is open to ${config.allowedEmailDomains.map((d) => '@' + d).join(', ')} addresses only.` });
-    }
-
-    const token = newToken();
-    const passwordHash = await hashPassword(password);
-    // An unverified account can sign up again (new password, fresh link). A verified one cannot.
-    const { rows } = await pool.query(
-      `INSERT INTO users (email, name, password_hash, verify_token_hash, verify_expires_at)
-       VALUES ($1, $2, $3, $4, now() + interval '24 hours')
-       ON CONFLICT (email) DO UPDATE SET name = $2, password_hash = $3, verify_token_hash = $4,
-         verify_expires_at = now() + interval '24 hours'
-       WHERE users.verified_at IS NULL
-       RETURNING id`,
-      [email, name, passwordHash, hashKey(token)],
-    );
-    if (!rows.length) return reply.code(409).send({ error: 'That email already has an account. Sign in instead.' });
-
-    const link = `${config.publicUrl}/v1/auth/verify?token=${token}`;
-    try {
-      await sendVerificationEmail(req.log, email, name, link);
-    } catch (err) {
-      req.log.error(err, 'verification email failed');
-      return reply.code(502).send({ error: 'Could not send the confirmation email. Try again shortly.' });
-    }
-    return reply.code(201).send({ email, verification: 'sent' });
-  });
-
-  // Opened from the email. Verifies the address, signs the user in and lands them on the dashboard.
-  app.get('/v1/auth/verify', async (req, reply) => {
-    const token = String((req.query as Record<string, unknown>).token ?? '');
-    const { rows } = token
-      ? await pool.query(
-          `UPDATE users SET verified_at = now(), verify_token_hash = NULL, verify_expires_at = NULL
-           WHERE verify_token_hash = $1 AND verify_expires_at > now() RETURNING id`,
-          [hashKey(token)],
-        )
-      : { rows: [] };
-    if (!rows.length) return reply.redirect('/#/signin?verify=failed');
-    reply.header('set-cookie', sessionCookie(await createSession(rows[0].id)));
-    return reply.redirect('/#/campaigns');
-  });
-
   app.post('/v1/auth/login', async (req, reply) => {
     const parsed = loginBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'Enter your email and password.' });
     const { email, password } = parsed.data;
     if (tooMany(email)) return reply.code(429).send({ error: 'Too many attempts. Wait 15 minutes and try again.' });
 
-    const { rows } = await pool.query(`SELECT id, password_hash, verified_at FROM users WHERE email = $1`, [email]);
+    const { rows } = await pool.query(
+      `SELECT id, password_hash, verified_at, must_change_password, temp_password_expires_at < now() AS temp_expired
+       FROM users WHERE email = $1`,
+      [email],
+    );
     const user = rows[0];
-    if (!user || !(await checkPassword(password, user.password_hash))) {
+    if (!user || !user.verified_at || !(await checkPassword(password, user.password_hash))) {
       fail(email);
       return reply.code(401).send({ error: 'Wrong email or password.' });
     }
-    if (!user.verified_at) {
-      return reply.code(403).send({ error: 'Confirm your email first. Check your inbox for the link, or sign up again to get a new one.' });
+    if (user.must_change_password && user.temp_expired) {
+      return reply.code(403).send({ error: 'Your temporary password has expired. Ask whoever invited you to send a new one.' });
     }
     failures.delete(email);
     reply.header('set-cookie', sessionCookie(await createSession(user.id)));
-    return { ok: true };
+    return { ok: true, must_change_password: user.must_change_password };
   });
 
   app.post('/v1/auth/logout', async (req, reply) => {
@@ -115,9 +65,58 @@ export async function authRoutes(app: FastifyInstance) {
     return reply.code(204).send();
   });
 
+  // Required after signing in with a temporary password; also how anyone changes their password.
+  app.post('/v1/auth/password', async (req, reply) => {
+    const user = await sessionUser(req);
+    if (!user) return reply.code(401).send({ error: 'not signed in' });
+    const parsed = passwordBody.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: 'Your new password needs at least 10 characters.' });
+    const { current_password, new_password } = parsed.data;
+    if (current_password === new_password) return reply.code(400).send({ error: 'Choose a password different from the current one.' });
+    const { rows } = await pool.query(`SELECT password_hash FROM users WHERE id = $1`, [user.id]);
+    if (!(await checkPassword(current_password, rows[0].password_hash))) {
+      return reply.code(400).send({ error: 'Your current password is wrong.' });
+    }
+    await pool.query(
+      `UPDATE users SET password_hash = $2, must_change_password = false, temp_password_expires_at = NULL WHERE id = $1`,
+      [user.id, await hashPassword(new_password)],
+    );
+    // Sign out every other session that knew the old password.
+    await pool.query(`DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2`, [user.id, user.token_hash]);
+    return { ok: true };
+  });
+
   app.get('/v1/auth/me', async (req, reply) => {
     const user = await sessionUser(req);
     if (!user) return reply.code(401).send({ error: 'not signed in' });
-    return user;
+    const superAdmin = isSuperAdmin(user.email);
+    const base = { id: user.id, email: user.email, name: user.name, must_change_password: user.must_change_password, super_admin: superAdmin };
+    if (user.must_change_password) return { ...base, workspace: null, permissions: [], workspaces: [] };
+    const w = await resolveWorkspace(user);
+    const { rows: workspaces } = await pool.query(
+      `SELECT w.id, w.name, m.role FROM workspaces w
+       LEFT JOIN memberships m ON m.workspace_id = w.id AND m.user_id = $1
+       WHERE m.user_id IS NOT NULL OR $2::boolean ORDER BY (m.role IS NULL), w.name`,
+      [user.id, superAdmin],
+    );
+    return {
+      ...base,
+      workspace: w && { id: w.id, name: w.name, role: w.role, support: w.support },
+      permissions: w?.permissions ?? [],
+      workspaces,
+    };
+  });
+
+  app.post('/v1/auth/workspace', async (req, reply) => {
+    const user = await sessionUser(req);
+    if (!user) return reply.code(401).send({ error: 'not signed in' });
+    if (user.must_change_password) return reply.code(403).send({ error: 'Choose a new password first.', code: 'password_change_required' });
+    const p = z.object({ workspace_id: z.string().uuid() }).safeParse(req.body);
+    if (!p.success) return reply.code(400).send({ error: 'workspace_id is required' });
+    const w = await resolveWorkspace({ ...user, session_workspace_id: p.data.workspace_id });
+    if (!w || w.id !== p.data.workspace_id) return reply.code(404).send({ error: 'workspace not found' });
+    await pool.query(`UPDATE sessions SET workspace_id = $2 WHERE token_hash = $1`, [user.token_hash, w.id]);
+    if (w.support) await audit({ workspaceId: w.id, userId: user.id }, 'support.opened', { email: user.email });
+    return { id: w.id, name: w.name, role: w.role, support: w.support };
   });
 }
