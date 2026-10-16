@@ -95,7 +95,15 @@ Skipped and failed contacts show up in the campaign report with the reason.
 ## Providers
 
 `TC_PROVIDER=mock` simulates the channel (delivered, then read; numbers ending in `0000` fail).
-`TC_PROVIDER=truecaller` uses the real API in `server/src/providers/truecaller.ts`.
+`TC_PROVIDER=truecaller` sends through Truecaller's Business Chat API v2 (gRPC service
+`truecaller.messenger.business.v2.BusinessApi`, method `BusinessSendMessage`) in
+`server/src/providers/truecaller.ts`. Each send uses our message id as `deduplication_id`, so a
+retry is never delivered twice. Delivery and read updates arrive on `POST /webhooks/truecaller`
+(v2 has no streaming subscription).
+
+The v2 `.proto` files come from Truecaller's partner portal and are not in this repo. Locally put
+them in `server/proto/`; on the box copy them to `/opt/truecaller-proto/`, which is mounted into
+the containers. Set `TC_API_BASE_URL` (gRPC host:port) and `TC_API_KEY`, then `TC_PROVIDER=truecaller`.
 
 ## Deploy
 

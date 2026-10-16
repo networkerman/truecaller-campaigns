@@ -9,3 +9,6 @@ dist
 
 # Local contact files with real numbers
 local/
+
+# Truecaller partner protos stay out of git
+server/proto/

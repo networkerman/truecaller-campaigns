@@ -7,6 +7,9 @@ x-app: &app
   image: truecaller-campaigns-server
   env_file: ${ENV_FILE:-/etc/truecaller-campaigns.env}
   restart: unless-stopped
+  # Truecaller Business Chat v2 .proto files, copied to the box by hand (not in git).
+  volumes:
+    - /opt/truecaller-proto:/app/proto:ro
   depends_on:
     db:
       condition: service_healthy
