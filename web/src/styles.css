@@ -214,3 +214,21 @@ a.btn { text-decoration: none; color: inherit; display: inline-block; }
 .req-action.link-row .input { flex: 1; min-width: 0; }
 .req-action .btn { white-space: nowrap; }
 @media (max-width: 520px) { .req-action.link-row { flex-wrap: wrap; } }
+
+/* ---- workspaces and team ---- */
+.ws { padding: 0 8px 16px; margin-bottom: 8px; border-bottom: 1px solid #1e293b; }
+.ws-name { color: #fff; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-select { width: 100%; background: #1e293b; color: #fff; border: 1px solid #334155; border-radius: 8px; padding: 6px 8px; font: inherit; }
+.ws-role { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+.whoami .sa { margin-left: 6px; }
+.err-text { color: var(--danger); }
+.st-owner { background: #eef4ff; color: #1d4ed8; }
+.st-admin { background: #f4f3ff; color: #5925dc; }
+.st-developer { background: #ecfdf3; color: #067647; }
+.st-analyst { background: #f2f4f7; color: #475467; }
+.st-pending { background: var(--warn-bg); color: var(--warn); }
+.role-select { width: auto; padding: 4px 8px; }
+
+/* ---- test mode ---- */
+.banner.test-mode { background: #fff4e5; color: #7a4100; border: 1px solid #f5c27a; }
+.simulated { margin: 0 0 10px; font-size: 12px; font-weight: 600; color: #7a4100; background: #fff4e5; border-radius: 6px; padding: 4px 8px; display: inline-block; }

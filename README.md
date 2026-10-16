@@ -20,16 +20,36 @@ npm install
 npm run dev               # http://localhost:5173, proxies /v1 to the server
 ```
 
-## Dashboard accounts
+## Workspaces, roles and sign-in
 
-People sign up on the dashboard with their work email and a password. Signup is open only to
-addresses in `ALLOWED_EMAIL_DOMAINS` (default `onextel.com`, comma separated for more). A new
-account gets a confirmation link by email and can sign in once it is confirmed. Sessions are an
-httpOnly cookie that lasts 14 days.
+Everything (campaigns, contact lists, templates, messages, opt-outs, API keys) belongs to a
+**workspace**. There is no public signup: people join by invitation.
 
-Email goes out through `SMTP_URL` (for example `smtps://USER:PASS@email-smtp.ap-south-1.amazonaws.com:465`
-for SES) from `MAIL_FROM`. Without `SMTP_URL` the confirmation link is written to the API log
-instead: `docker compose logs api | grep verification`.
+- **Super admins** are the emails in `SUPER_ADMIN_EMAILS` (OneXtel). They create customer
+  workspaces, see all of them under *All workspaces*, and can open any workspace for support.
+  Opening a workspace you're not a member of is recorded in its audit log. At startup each super
+  admin without an account gets one, as Owner of the first workspace, with an invitation emailed.
+- **New workspace**: a super admin enters a workspace name and the customer's name and email.
+  That person becomes the workspace's **Owner** and can invite their own team.
+- **Invite into a workspace**: Owners and Admins invite people with a role from the Team page.
+
+| Role | Can |
+| --- | --- |
+| Owner | Everything, including making or changing Owners. A workspace always keeps one. |
+| Admin | Everything except managing Owners. |
+| Developer | Templates, contact lists, campaigns, sends and API keys. |
+| Analyst | Read only: campaigns, templates, lists and reports. |
+
+Invitations email a temporary password that works for 7 days. The first sign-in asks for a new
+password before anything else; *Resend* on the Team page issues a fresh one. Someone who already
+has an account is just added to the workspace. Sessions are an httpOnly cookie that lasts 14 days.
+
+API keys belong to the workspace they were made in and can use templates, lists, campaigns and
+sends there, but not the team or other keys. Setup keys in `API_KEYS` act in the first workspace.
+
+Invitation emails go through Tarang's `invite` template when `TARANG_API_KEY` is set, else
+through `SMTP_URL`, from `MAIL_FROM`. With neither, the invitation (temporary password included)
+is written to the API log: `docker compose logs api | grep invitation`.
 
 ## API (so far)
 
@@ -47,13 +67,18 @@ All `/v1` calls need an `x-api-key` header (the dashboard uses its sign-in cooki
 | GET / DELETE | `/v1/lists/:id` | List details with a contact sample, or delete it (blocked once a campaign uses it) |
 | POST | `/v1/lists/:id/contacts` | Add contacts from a raw CSV body (`text/csv`), a raw `.xlsx` body, or JSON `{ "source": "sheet" \| "url", "url": "..." }` for a public Google Sheet or CSV link. Needs a phone column (`phone`, `mobile`, `truecaller`, …); other columns become `{{variables}}`. Max 50 MB |
 | POST | `/v1/lists/validate` | Same inputs, checks them without saving: valid and invalid counts, columns, a short preview |
-| POST / DELETE | `/v1/opt-outs`, `/v1/opt-outs/:phone` | Global opt-out list; opted-out numbers never get campaign messages |
+| POST / DELETE | `/v1/opt-outs`, `/v1/opt-outs/:phone` | The workspace's opt-out list; opted-out numbers never get its campaign messages |
 | GET / POST | `/v1/campaigns` | List or create campaigns (`name`, `template_id`, `list_id`, optional `sender_id`, `launch`, `scheduled_at`) |
 | GET / DELETE | `/v1/campaigns/:id` | Campaign with live counts, or delete a draft |
 | POST | `/v1/campaigns/:id/launch`, `/v1/campaigns/:id/cancel` | Send now (or at `scheduled_at`), or stop |
 | GET | `/v1/campaigns/:id/report`, `/v1/campaigns/:id/messages.csv` | Funnel, rates and failure reasons; per-message export |
 | GET / POST | `/v1/api-keys`, `/v1/api-keys/:id/revoke` | Customer API keys (full key shown once on create) |
-| POST | `/v1/auth/signup`, `/v1/auth/login`, `/v1/auth/logout` | Dashboard accounts (no API key needed) |
+| POST | `/v1/auth/login`, `/v1/auth/logout`, `/v1/auth/password` | Dashboard sign-in and password change |
+| GET / POST | `/v1/auth/me`, `/v1/auth/workspace` | Who is signed in, their workspaces and permissions; switch workspace |
+| GET / POST | `/v1/team`, `/v1/team/invitations` | Workspace members; invite someone with a role (dashboard only) |
+| PATCH / DELETE | `/v1/team/members/:userId` | Change a role or remove someone; `POST …/resend` for a new temporary password |
+| GET | `/v1/audit` | The workspace's audit log |
+| GET / POST | `/v1/admin/workspaces` | Super admins: all workspaces; create one with its Owner |
 | POST | `/webhooks/truecaller` | Delivery callbacks from Truecaller |
 | GET | `/health` | Health check |
 

@@ -2,10 +2,20 @@
 // httpOnly cookie, so nothing secret is stored in the browser.
 let onUnauthorized: () => void = () => {};
 
+export type Role = 'owner' | 'admin' | 'developer' | 'analyst';
+export const ROLES: Role[] = ['owner', 'admin', 'developer', 'analyst'];
+export type Permission = 'workspace:own' | 'members:manage' | 'keys:manage' | 'templates:manage' | 'campaigns:manage' | 'reports:view';
+
 export interface User {
   id: string;
   email: string;
   name: string;
+  must_change_password: boolean;
+  super_admin: boolean;
+  // support: a super admin working in a workspace they are not a member of.
+  workspace: { id: string; name: string; role: Role; support: boolean } | null;
+  permissions: Permission[];
+  workspaces: { id: string; name: string; role: Role | null }[];
 }
 
 // Every request goes through here so an expired session sends the user back to sign-in.
@@ -21,9 +31,11 @@ export const auth = {
     const res = await request('/v1/auth/me');
     return res.ok ? res.json() : null;
   },
-  login: (email: string, password: string) => call<{ ok: true }>('POST', '/v1/auth/login', { email, password }),
-  signup: (name: string, email: string, password: string) =>
-    call<{ email: string }>('POST', '/v1/auth/signup', { name, email, password }),
+  login: (email: string, password: string) =>
+    call<{ ok: true; must_change_password: boolean }>('POST', '/v1/auth/login', { email, password }),
+  changePassword: (current_password: string, new_password: string) =>
+    call<{ ok: true }>('POST', '/v1/auth/password', { current_password, new_password }),
+  switchWorkspace: (workspace_id: string) => call<unknown>('POST', '/v1/auth/workspace', { workspace_id }),
   logout: () => call<void>('POST', '/v1/auth/logout'),
 };
 
@@ -191,4 +203,46 @@ export const apiKeys = {
   all: () => call<{ data: ApiKey[] }>('GET', '/v1/api-keys').then((r) => r.data),
   create: (name: string) => call<ApiKey>('POST', '/v1/api-keys', { name }),
   revoke: (id: string) => call<ApiKey>('POST', `/v1/api-keys/${id}/revoke`),
+};
+
+export interface Member {
+  user_id: string;
+  email: string;
+  name: string;
+  role: Role;
+  pending: boolean; // invited, hasn't signed in and set a password yet
+  joined_at: string;
+  invited_by: string | null;
+}
+
+export interface AuditEntry {
+  id: number;
+  action: string;
+  detail: Record<string, unknown> | null;
+  actor: string | null;
+  created_at: string;
+}
+
+export const team = {
+  all: () => call<{ data: Member[] }>('GET', '/v1/team').then((r) => r.data),
+  invite: (b: { email: string; name: string; role: Role }) => call<Member>('POST', '/v1/team/invitations', b),
+  setRole: (userId: string, role: Role) => call<unknown>('PATCH', `/v1/team/members/${userId}`, { role }),
+  remove: (userId: string) => call<void>('DELETE', `/v1/team/members/${userId}`),
+  resend: (userId: string) => call<unknown>('POST', `/v1/team/members/${userId}/resend`),
+  audit: () => call<{ data: AuditEntry[] }>('GET', '/v1/audit').then((r) => r.data),
+};
+
+export interface WorkspaceRow {
+  id: string;
+  name: string;
+  created_at: string;
+  members: number;
+  owners: string[] | null;
+  campaigns: number;
+}
+
+export const admin = {
+  workspaces: () => call<{ data: WorkspaceRow[] }>('GET', '/v1/admin/workspaces').then((r) => r.data),
+  createWorkspace: (b: { name: string; owner_email: string; owner_name: string }) =>
+    call<WorkspaceRow>('POST', '/v1/admin/workspaces', b),
 };

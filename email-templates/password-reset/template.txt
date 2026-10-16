@@ -1,0 +1,6 @@
+Hi {{name}},
+
+Reset the password for {{email}}:
+{{link}}
+
+The link works for {{expiresMinutes}} minutes and can be used once. If you didn't ask for this, ignore this email.

@@ -12,7 +12,8 @@ DOMAIN=${DOMAIN:-truecaller.udchowdhury.me}
 POSTGRES_PASSWORD=$pw
 DATABASE_URL=postgres://postgres:$pw@db:5432/truecaller
 API_KEYS=$key
-ALLOWED_EMAIL_DOMAINS=onextel.com
+SUPER_ADMIN_EMAILS=${SUPER_ADMIN_EMAILS:-}
+TARANG_API_KEY=
 SMTP_URL=
 MAIL_FROM=Truecaller Campaigns <no-reply@onextel.com>
 TC_PROVIDER=mock
@@ -22,4 +23,4 @@ TC_SENDER_ID=
 TC_WEBHOOK_SECRET=
 EOT
 sudo chmod 600 "$ENV"
-echo "created $ENV. Set SMTP_URL in it so signup emails go out."
+echo "created $ENV. Set SUPER_ADMIN_EMAILS and TARANG_API_KEY (or SMTP_URL) in it so invitations go out."

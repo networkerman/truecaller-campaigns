@@ -1,0 +1,5 @@
+Hi {{name}},
+
+{{actor}} created the API key "{{key.name}}" (ending {{key.last4}}) at {{key.createdAt}}.
+
+If you didn't expect this, revoke it: {{keysUrl}}

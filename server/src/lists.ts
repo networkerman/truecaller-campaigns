@@ -11,43 +11,47 @@ export function normalizePhone(raw: string) {
   return p?.isValid() ? p.number : null;
 }
 
-export async function listLists() {
+export async function listLists(ws: string) {
   const { rows } = await pool.query(
     `SELECT l.id, l.name, l.columns, l.created_at, count(c.id)::int AS contact_count
      FROM contact_lists l LEFT JOIN contacts c ON c.list_id = l.id
-     GROUP BY l.id ORDER BY l.created_at DESC`,
+     WHERE l.workspace_id = $1 GROUP BY l.id ORDER BY l.created_at DESC`,
+    [ws],
   );
   return rows;
 }
 
-export async function getList(id: string) {
+export async function getList(ws: string, id: string) {
   const { rows } = await pool.query(
     `SELECT l.id, l.name, l.columns, l.created_at,
        (SELECT count(*)::int FROM contacts WHERE list_id = l.id) AS contact_count
-     FROM contact_lists l WHERE l.id = $1`,
-    [id],
+     FROM contact_lists l WHERE l.id = $1 AND l.workspace_id = $2`,
+    [id, ws],
   );
   return rows[0] ?? null;
 }
 
-export async function createList(name: string) {
-  const { rows } = await pool.query(`INSERT INTO contact_lists (name) VALUES ($1) RETURNING id, name, columns, created_at`, [name]);
+export async function createList(ws: string, name: string) {
+  const { rows } = await pool.query(
+    `INSERT INTO contact_lists (workspace_id, name) VALUES ($1, $2) RETURNING id, name, columns, created_at`,
+    [ws, name],
+  );
   return { ...rows[0], contact_count: 0 };
 }
 
-export async function deleteList(id: string) {
+export async function deleteList(ws: string, id: string) {
   const used = await pool.query(`SELECT 1 FROM campaigns WHERE list_id = $1 LIMIT 1`, [id]);
   if (used.rowCount) return 'in_use' as const;
-  const res = await pool.query(`DELETE FROM contact_lists WHERE id = $1`, [id]);
+  const res = await pool.query(`DELETE FROM contact_lists WHERE id = $1 AND workspace_id = $2`, [id, ws]);
   return res.rowCount ? ('deleted' as const) : ('not_found' as const);
 }
 
-export async function sampleContacts(listId: string, limit = 50) {
+export async function sampleContacts(ws: string, listId: string, limit = 50) {
   const { rows } = await pool.query(
     `SELECT c.phone, c.attributes, (o.phone IS NOT NULL) AS opted_out
-     FROM contacts c LEFT JOIN opt_outs o ON o.phone = c.phone
+     FROM contacts c LEFT JOIN opt_outs o ON o.phone = c.phone AND o.workspace_id = $3
      WHERE c.list_id = $1 ORDER BY c.created_at LIMIT $2`,
-    [listId, limit],
+    [listId, limit, ws],
   );
   return rows;
 }

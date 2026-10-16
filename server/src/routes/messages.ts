@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { z } from 'zod';
-import { requireAuth } from '../auth.js';
+import { requireAuth, requirePermission } from '../auth.js';
 import { config } from '../config.js';
 import { getMessage, sendMessage } from '../messages.js';
 import type { MessagingProvider } from '../providers/types.js';
@@ -22,7 +22,7 @@ const SendBody = z
 export async function messageRoutes(app: FastifyInstance, opts: { provider: MessagingProvider }) {
   app.addHook('onRequest', requireAuth);
 
-  app.post('/v1/messages', async (req, reply) => {
+  app.post('/v1/messages', { preHandler: requirePermission('campaigns:manage') }, async (req, reply) => {
     const parsed = SendBody.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'invalid body', details: parsed.error.issues });
     const data = parsed.data;
@@ -34,7 +34,7 @@ export async function messageRoutes(app: FastifyInstance, opts: { provider: Mess
     let body = data.body ?? '';
     let category: string = data.category;
     if (data.template_id) {
-      const t = await getTemplate(data.template_id);
+      const t = await getTemplate(req.ctx.workspaceId, data.template_id);
       if (!t) return reply.code(400).send({ error: 'template not found' });
       if (t.status !== 'approved') return reply.code(400).send({ error: `template is ${t.status}, not approved` });
       const out = render(t.body, data.variables);
@@ -44,6 +44,7 @@ export async function messageRoutes(app: FastifyInstance, opts: { provider: Mess
     }
 
     const msg = await sendMessage(opts.provider, {
+      workspaceId: req.ctx.workspaceId,
       to: phone.number,
       senderId: data.sender_id ?? config.tc.senderId,
       category,
@@ -53,9 +54,9 @@ export async function messageRoutes(app: FastifyInstance, opts: { provider: Mess
     return reply.code(202).send(msg);
   });
 
-  app.get<{ Params: { id: string } }>('/v1/messages/:id', async (req, reply) => {
+  app.get<{ Params: { id: string } }>('/v1/messages/:id', { preHandler: requirePermission('reports:view') }, async (req, reply) => {
     if (!z.string().uuid().safeParse(req.params.id).success) return reply.code(404).send({ error: 'not found' });
-    const msg = await getMessage(req.params.id);
+    const msg = await getMessage(req.ctx.workspaceId, req.params.id);
     return msg ?? reply.code(404).send({ error: 'not found' });
   });
 }

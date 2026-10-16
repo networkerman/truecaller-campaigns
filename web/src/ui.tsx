@@ -1,3 +1,4 @@
+import { useTestMode } from './testMode';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 export const fmt = (n: number) => n.toLocaleString('en-IN');
@@ -54,8 +55,10 @@ export function PageHead({ title, sub, action }: { title: string; sub: string; a
 
 export function Funnel({ steps }: { steps: { stage: string; count: number }[] }) {
   const top = Math.max(steps[0]?.count ?? 0, 1);
+  const testMode = useTestMode();
   return (
     <div className="funnel">
+      {testMode && <p className="simulated">Simulated results: test mode, nothing was sent.</p>}
       {steps.map((s, i) => (
         <div key={s.stage} className="funnel-row">
           <span className="funnel-label">{s.stage}</span>

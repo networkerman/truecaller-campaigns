@@ -25,24 +25,24 @@ const SELECT_CAMPAIGN = `
   JOIN contact_lists l ON l.id = c.list_id
   LEFT JOIN messages m ON m.campaign_id = c.id`;
 
-export async function listCampaigns() {
-  return (await pool.query(`${SELECT_CAMPAIGN} GROUP BY c.id, t.id, l.id ORDER BY c.created_at DESC`)).rows;
+export async function listCampaigns(ws: string) {
+  return (await pool.query(`${SELECT_CAMPAIGN} WHERE c.workspace_id = $1 GROUP BY c.id, t.id, l.id ORDER BY c.created_at DESC`, [ws])).rows;
 }
 
-export async function getCampaign(id: string) {
-  return (await pool.query(`${SELECT_CAMPAIGN} WHERE c.id = $1 GROUP BY c.id, t.id, l.id`, [id])).rows[0] ?? null;
+export async function getCampaign(ws: string, id: string) {
+  return (await pool.query(`${SELECT_CAMPAIGN} WHERE c.id = $1 AND c.workspace_id = $2 GROUP BY c.id, t.id, l.id`, [id, ws])).rows[0] ?? null;
 }
 
-export async function createCampaign(c: { name: string; templateId: string; listId: string; senderId: string }) {
+export async function createCampaign(ws: string, c: { name: string; templateId: string; listId: string; senderId: string }) {
   const { rows } = await pool.query(
-    `INSERT INTO campaigns (name, template_id, list_id, sender_id) VALUES ($1, $2, $3, $4) RETURNING id`,
-    [c.name, c.templateId, c.listId, c.senderId],
+    `INSERT INTO campaigns (workspace_id, name, template_id, list_id, sender_id) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [ws, c.name, c.templateId, c.listId, c.senderId],
   );
-  return getCampaign(rows[0].id);
+  return getCampaign(ws, rows[0].id);
 }
 
-export async function launchCampaign(id: string, scheduledAt: Date | null) {
-  const c = await getCampaign(id);
+export async function launchCampaign(ws: string, id: string, scheduledAt: Date | null) {
+  const c = await getCampaign(ws, id);
   if (!c) return { status: 404, error: 'not found' };
   if (c.status !== 'draft') return { status: 409, error: `campaign is already ${c.status}` };
   if (c.template_status !== 'approved') return { status: 400, error: 'the template must be approved before launch' };
@@ -52,20 +52,20 @@ export async function launchCampaign(id: string, scheduledAt: Date | null) {
     `UPDATE campaigns SET status = $2, scheduled_at = $3, started_at = $4, updated_at = now() WHERE id = $1`,
     [id, later ? 'scheduled' : 'running', later ? scheduledAt : null, later ? null : new Date()],
   );
-  return { campaign: await getCampaign(id) };
+  return { campaign: await getCampaign(ws, id) };
 }
 
-export async function cancelCampaign(id: string) {
+export async function cancelCampaign(ws: string, id: string) {
   const { rows } = await pool.query(
     `UPDATE campaigns SET status = 'cancelled', completed_at = now(), note = NULL, updated_at = now()
-     WHERE id = $1 AND status IN ('scheduled', 'running') RETURNING id`,
-    [id],
+     WHERE id = $1 AND workspace_id = $2 AND status IN ('scheduled', 'running') RETURNING id`,
+    [id, ws],
   );
-  return rows[0] ? getCampaign(id) : null;
+  return rows[0] ? getCampaign(ws, id) : null;
 }
 
-export async function campaignReport(id: string) {
-  const c = await getCampaign(id);
+export async function campaignReport(ws: string, id: string) {
+  const c = await getCampaign(ws, id);
   if (!c) return null;
   const reasons = await pool.query(
     `SELECT status, coalesce(error, 'Unknown') AS reason, count(*)::int AS count
@@ -134,7 +134,7 @@ async function setNote(id: string, note: string | null) {
 
 async function sendBatch(provider: MessagingProvider, campaignId: string, batchSize: number) {
   const { rows: cr } = await pool.query(
-    `SELECT c.id, c.list_id, c.sender_id, c.template_id, t.body, t.category
+    `SELECT c.id, c.workspace_id, c.list_id, c.sender_id, c.template_id, t.body, t.category
      FROM campaigns c JOIN templates t ON t.id = c.template_id WHERE c.id = $1 AND c.status = 'running'`,
     [campaignId],
   );
@@ -159,11 +159,11 @@ async function sendBatch(provider: MessagingProvider, campaignId: string, batchS
   const { rows: batch } = await pool.query(
     `SELECT ct.id, ct.phone, ct.attributes, (o.phone IS NOT NULL) AS opted_out
      FROM contacts ct
-     LEFT JOIN opt_outs o ON o.phone = ct.phone
+     LEFT JOIN opt_outs o ON o.phone = ct.phone AND o.workspace_id = $4
      WHERE ct.list_id = $1
        AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.campaign_id = $2 AND m.contact_id = ct.id)
      ORDER BY ct.created_at, ct.id LIMIT $3`,
-    [c.list_id, c.id, room],
+    [c.list_id, c.id, room, c.workspace_id],
   );
 
   if (batch.length === 0) {
@@ -201,7 +201,7 @@ async function sendBatch(provider: MessagingProvider, campaignId: string, batchS
 
   const toSend: { id: string; msg: NewMessage }[] = [];
   for (const ct of batch) {
-    const base = { to: ct.phone, senderId: c.sender_id, category: c.category, templateId: c.template_id, campaignId: c.id, contactId: ct.id };
+    const base = { workspaceId: c.workspace_id, to: ct.phone, senderId: c.sender_id, category: c.category, templateId: c.template_id, campaignId: c.id, contactId: ct.id };
     const out = render(c.body, ct.attributes ?? {});
 
     let blocked: string | null = null;

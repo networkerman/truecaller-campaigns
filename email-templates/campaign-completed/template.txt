@@ -1,0 +1,11 @@
+Hi {{name}},
+
+Your campaign "{{campaign.name}}" finished sending at {{campaign.finishedAt}}.
+
+Recipients: {{stats.total}}
+Sent: {{stats.sent}}
+Delivered: {{stats.delivered}}
+Read: {{stats.read}}
+Failed: {{stats.failed}}
+
+Report: {{campaign.reportUrl}}
