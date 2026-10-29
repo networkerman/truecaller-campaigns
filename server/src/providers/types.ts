@@ -5,6 +5,7 @@ export interface SendRequest {
   to: string; // E.164
   senderId: string;
   body: string;
+  campaignId?: string;
 }
 
 export interface SendResult {

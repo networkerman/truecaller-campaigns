@@ -37,7 +37,7 @@ export async function insertMessage(
 // Hands a queued message to the provider and records the outcome.
 export async function deliver(provider: MessagingProvider, id: string, msg: NewMessage) {
   try {
-    const res = await provider.send({ messageId: id, to: msg.to, senderId: msg.senderId, body: msg.body });
+    const res = await provider.send({ messageId: id, to: msg.to, senderId: msg.senderId, body: msg.body, campaignId: msg.campaignId });
     await pool.query(
       `UPDATE messages SET provider_message_id = $2, status = $3, updated_at = now() WHERE id = $1`,
       [id, res.providerMessageId, res.status],

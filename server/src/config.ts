@@ -9,6 +9,9 @@ export const config = {
     apiKey: env.TC_API_KEY ?? '',
     senderId: env.TC_SENDER_ID ?? 'DEMO',
     webhookSecret: env.TC_WEBHOOK_SECRET ?? '',
+    // Business Chat API v2 .proto files from the Truecaller partner portal (kept out of git).
+    protoDir: env.TC_PROTO_DIR ?? new URL('../proto', import.meta.url).pathname,
+    ttlSeconds: Number(env.TC_TTL_SECONDS ?? 86_400),
   },
   apiKeys: (env.API_KEYS ?? 'dev-key').split(',').map((k) => k.trim()).filter(Boolean),
   // OneXtel super admins: create workspaces, invite anyone, and open any workspace for support.

@@ -8,6 +8,8 @@
     "migrate": "tsx src/migrate.ts"
   },
   "dependencies": {
+    "@grpc/grpc-js": "^1.14.6",
+    "@grpc/proto-loader": "^0.8.1",
     "csv-parse": "^7.0.3",
     "exceljs": "^4.4.0",
     "fastify": "^5.12.5",
