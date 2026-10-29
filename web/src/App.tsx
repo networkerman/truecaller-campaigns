@@ -4,20 +4,24 @@ import { ApiKeysPage } from './ApiKeysPage';
 import { CampaignsPage } from './CampaignsPage';
 import { ListsPage } from './ListsPage';
 import { ReportsPage } from './ReportsPage';
+import { SendersPage } from './SendersPage';
 import { TeamPage } from './TeamPage';
 import { TemplatesPage } from './TemplatesPage';
 import { useTestMode } from './testMode';
+import { WebhooksPage } from './WebhooksPage';
 import { WorkspacesPage } from './WorkspacesPage';
 
 // `need` hides a section from roles that can't use it; `superAdmin` sections are OneXtel-only.
-const NAV: { path: string; label: string; need?: Permission; superAdmin?: boolean }[] = [
-  { path: 'campaigns', label: 'Campaigns' },
-  { path: 'templates', label: 'Templates' },
-  { path: 'lists', label: 'Contact lists' },
-  { path: 'reports', label: 'Reports' },
-  { path: 'api-keys', label: 'API keys', need: 'keys:manage' },
-  { path: 'team', label: 'Team' },
-  { path: 'workspaces', label: 'All workspaces', superAdmin: true },
+const NAV: { path: string; label: string; group: string; need?: Permission; superAdmin?: boolean }[] = [
+  { path: 'campaigns', label: 'Campaigns', group: 'Messaging' },
+  { path: 'templates', label: 'Templates', group: 'Messaging' },
+  { path: 'lists', label: 'Contact lists', group: 'Messaging' },
+  { path: 'reports', label: 'Reports', group: 'Messaging' },
+  { path: 'api-keys', label: 'API keys', group: 'Developers', need: 'keys:manage' },
+  { path: 'webhooks', label: 'Webhooks', group: 'Developers', need: 'keys:manage' },
+  { path: 'senders', label: 'Senders', group: 'Settings', need: 'reports:view' },
+  { path: 'team', label: 'Team', group: 'Settings' },
+  { path: 'workspaces', label: 'All workspaces', group: 'OneXtel', superAdmin: true },
 ];
 
 const parse = () => {
@@ -71,9 +75,11 @@ export function App() {
   };
   const nav = NAV.filter((n) => (n.superAdmin ? user.super_admin : !n.need || user.permissions.includes(n.need)));
   const page = nav.some((n) => n.path === route.page) ? route.page : 'campaigns';
-  const links = nav.map((n) => (
+  const link = (n: (typeof NAV)[number]) => (
     <a key={n.path} href={`#/${n.path}`} className={page === n.path ? 'active' : ''}>{n.label}</a>
-  ));
+  );
+  const links = nav.map(link);
+  const groups = [...new Set(nav.map((n) => n.group))];
 
   return (
     <div className="shell">
@@ -91,7 +97,14 @@ export function App() {
           )}
           <div className="ws-role">{ws.support ? 'Support access' : roleLabel(ws.role)}</div>
         </div>
-        <nav>{links}</nav>
+        <nav>
+          {groups.map((g) => (
+            <div key={g} className="nav-group">
+              {g !== 'Messaging' && <div className="nav-label">{g}</div>}
+              {nav.filter((n) => n.group === g).map(link)}
+            </div>
+          ))}
+        </nav>
         <div className="whoami" title={user.email}>{user.name}{user.super_admin && <small className="sa">Super admin</small>}</div>
         <button className="signout" onClick={signOut}>Sign out</button>
       </aside>
@@ -109,6 +122,8 @@ export function App() {
         {page === 'lists' && <ListsPage />}
         {page === 'reports' && <ReportsPage id={route.id} onSelect={(id) => (location.hash = `#/reports/${id}`)} />}
         {page === 'api-keys' && <ApiKeysPage />}
+        {page === 'webhooks' && <WebhooksPage />}
+        {page === 'senders' && <SendersPage canRequest={user.permissions.includes('campaigns:manage')} />}
         {page === 'team' && <TeamPage user={user} />}
         {page === 'workspaces' && <WorkspacesPage onOpen={switchTo} />}
       </main>
@@ -119,9 +134,19 @@ export function App() {
 function Brand({ dark }: { dark?: boolean }) {
   return (
     <div className={dark ? 'brand dark' : 'brand'}>
-      <span className="brand-mark">TC</span>
-      <span>Campaigns</span>
+      <XMark />
+      <span className="brand-name">OneXtel<small>Truecaller campaigns</small></span>
     </div>
+  );
+}
+
+// OneXtel X mark, drawn from the brand guidelines. Swap for the official SVG when we have it.
+export function XMark({ size = 28 }: { size?: number }) {
+  return (
+    <svg className="brand-mark" width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
+      <rect width="32" height="32" rx="7" fill="#D72327" />
+      <path d="M9 9l14 14M23 9L9 23" stroke="#fff" strokeWidth="4.2" strokeLinecap="round" />
+    </svg>
   );
 }
 

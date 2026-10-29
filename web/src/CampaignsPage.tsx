@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { api, campaigns, lists, type Campaign, type ContactList, type Template } from './api';
+import { api, campaigns, lists, senders, type Campaign, type ContactList, type SendersResponse, type Template } from './api';
 import { AudiencePicker, audienceSource, emptyAudience, type Audience } from './Audience';
 import { Drawer, Funnel, PageHead, fmt, useAsync, usePoll, when } from './ui';
 
@@ -67,6 +67,7 @@ export function CampaignsPage() {
 function NewCampaign({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [allLists, setLists] = useState<ContactList[]>([]);
+  const [senderInfo, setSenderInfo] = useState<SendersResponse | null>(null);
   const [form, setForm] = useState({ name: '', template_id: '', sender_id: '', when: 'now', at: '' });
   const [audience, setAudience] = useState<Audience>(emptyAudience);
   // Keeps the list made from an upload, so a retry after an error doesn't import it twice.
@@ -75,7 +76,9 @@ function NewCampaign({ onClose, onCreated }: { onClose: () => void; onCreated: (
   usePoll(() => {
     api.listTemplates().then(setTemplates);
     lists.all().then(setLists);
+    senders.all().then(setSenderInfo, () => {});
   }, 0, false);
+  const activeSenders = senderInfo?.data.filter((x) => x.status === 'active') ?? [];
 
   const t = templates.find((x) => x.id === form.template_id);
   const cohort = audience.mode === 'cohort' ? allLists.find((x) => x.id === audience.listId) : undefined;
@@ -136,8 +139,17 @@ function NewCampaign({ onClose, onCreated }: { onClose: () => void; onCreated: (
         </label>
         <AudiencePicker value={audience} onChange={setAudience} cohorts={allLists} variables={t?.variables ?? []} />
         <label>
-          Sender ID <span className="hint">Optional, uses the default sender if empty</span>
-          <input className="input" value={form.sender_id} onChange={(e) => setForm({ ...form, sender_id: e.target.value })} />
+          Sender
+          {activeSenders.length ? (
+            <select className="input" value={form.sender_id || activeSenders[0].sender_id} onChange={(e) => setForm({ ...form, sender_id: e.target.value })}>
+              {activeSenders.map((x) => (
+                <option key={x.id} value={x.sender_id}>{x.display_name} ({x.sender_id})</option>
+              ))}
+            </select>
+          ) : (
+            <input className="input" disabled value={senderInfo ? `${senderInfo.default_sender} (platform default)` : ''} />
+          )}
+          <span className="hint">Need a different sender? <a className="link" href="#/senders">Request one</a>.</span>
         </label>
         <fieldset className="choice">
           <label className="inline"><input type="radio" checked={form.when === 'now'} onChange={() => setForm({ ...form, when: 'now' })} /> Send now</label>

@@ -5,6 +5,7 @@ import { requireAuth, requirePermission } from '../auth.js';
 import { config } from '../config.js';
 import { getMessage, sendMessage } from '../messages.js';
 import type { MessagingProvider } from '../providers/types.js';
+import { checkSender } from './senders.js';
 import { getTemplate, render } from '../templates.js';
 
 // Either a free-text body, or an approved template plus its variable values.
@@ -43,10 +44,12 @@ export async function messageRoutes(app: FastifyInstance, opts: { provider: Mess
       category = t.category;
     }
 
+    const sender = await checkSender(req.ctx.workspaceId, data.sender_id);
+    if ('error' in sender) return reply.code(400).send({ error: sender.error });
     const msg = await sendMessage(opts.provider, {
       workspaceId: req.ctx.workspaceId,
       to: phone.number,
-      senderId: data.sender_id ?? config.tc.senderId,
+      senderId: sender.senderId,
       category,
       body,
       templateId: data.template_id,

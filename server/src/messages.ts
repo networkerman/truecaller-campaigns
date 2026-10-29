@@ -1,3 +1,4 @@
+import { emitMessageEvent } from './customerWebhooks.js';
 import { pool } from './db.js';
 import type { MessagingProvider, MessageStatus, StatusUpdate } from './providers/types.js';
 
@@ -31,6 +32,7 @@ export async function insertMessage(
   );
   if (!rows[0]) return null;
   await logEvent(rows[0].id, status, error ? { error } : null);
+  if (status === 'failed') await emitMessageEvent(rows[0].id, 'failed', error);
   return rows[0].id;
 }
 
@@ -43,10 +45,12 @@ export async function deliver(provider: MessagingProvider, id: string, msg: NewM
       [id, res.providerMessageId, res.status],
     );
     await logEvent(id, res.status, null);
+    await emitMessageEvent(id, res.status);
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
     await pool.query(`UPDATE messages SET status = 'failed', error = $2, updated_at = now() WHERE id = $1`, [id, error]);
     await logEvent(id, 'failed', { error });
+    await emitMessageEvent(id, 'failed', error);
   }
 }
 
@@ -64,6 +68,7 @@ export async function applyStatusUpdate(u: StatusUpdate) {
   await logEvent(id, u.status, u.raw ?? (u.error ? { error: u.error } : null));
   if (rank[u.status] > rank[status]) {
     await pool.query(`UPDATE messages SET status = $2, error = $3, updated_at = now() WHERE id = $1`, [id, u.status, u.error ?? null]);
+    await emitMessageEvent(id, u.status, u.error);
   }
   return true;
 }

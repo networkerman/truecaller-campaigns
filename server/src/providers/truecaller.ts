@@ -28,8 +28,8 @@ function protoFiles(dir: string): string[] {
 
 function getClient() {
   if (client) return client;
-  const { apiBaseUrl, apiKey, protoDir } = { apiBaseUrl: config.tc.baseUrl, apiKey: config.tc.apiKey, protoDir: config.tc.protoDir };
-  if (!apiBaseUrl || !apiKey) throw new Error('TC_API_BASE_URL and TC_API_KEY must be set to use the truecaller provider');
+  const { baseUrl: apiBaseUrl, protoDir } = config.tc;
+  if (!apiBaseUrl) throw new Error('TC_API_BASE_URL must be set to use the truecaller provider');
   if (!existsSync(protoDir) || !protoFiles(protoDir).length) {
     throw new Error(`No Truecaller .proto files found in ${protoDir}. Download them from the partner portal and set TC_PROTO_DIR.`);
   }
@@ -53,8 +53,10 @@ export function dedupId(messageId: string) {
   return (BigInt('0x' + messageId.replace(/-/g, '').slice(0, 16)) & 0x7fffffffffffffffn).toString();
 }
 
-// BusinessSendMessage.Request from business_api_v2.proto. There is no sender field: the
-// sender is whoever the API key belongs to (see apiKeyFor).
+// The request has no sender field: Truecaller sends as whoever owns the API key.
+export const apiKeyFor = (senderId: string) => config.tc.senderKeys[senderId] || config.tc.apiKey;
+
+// BusinessSendMessage.Request from business_api_v2.proto.
 export function buildSendRequest(req: SendRequest) {
   return {
     deduplication_id: dedupId(req.messageId),
@@ -66,9 +68,11 @@ export function buildSendRequest(req: SendRequest) {
 }
 
 function send(req: SendRequest): Promise<Record<string, unknown>> {
+  const key = apiKeyFor(req.senderId);
+  if (!key) throw new Error(`No Truecaller API key for sender ${req.senderId}. Set TC_SENDER_KEYS or TC_API_KEY.`);
   const c = getClient();
   const meta = new grpc.Metadata();
-  meta.set('authorization', `Bearer ${config.tc.apiKey}`);
+  meta.set('authorization', `Bearer ${key}`);
   return new Promise((resolve, reject) => {
     c.BusinessSendMessage(buildSendRequest(req), meta, { deadline: Date.now() + 15_000 }, (err, res) => {
       if (err) return reject(new Error(`Truecaller ${grpc.status[err.code] ?? err.code}: ${err.details || err.message}`));
