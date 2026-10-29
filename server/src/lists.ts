@@ -1,8 +1,9 @@
-import { parse } from 'csv-parse/sync';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { pool } from './db.js';
 
-const PHONE_HEADERS = ['phone', 'mobile', 'msisdn', 'number', 'phone_number', 'mobile_number', 'phone number', 'mobile number'];
+// The audience file needs one of these columns (any case, spaces or underscores) for the Truecaller number.
+export const PHONE_HEADERS = ['phone', 'mobile', 'msisdn', 'number', 'phone_number', 'mobile_number', 'truecaller', 'truecaller_number'];
+const headerKey = (h: string) => h.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
 
 export function normalizePhone(raw: string) {
   // Bare 10-digit numbers are treated as Indian, the first market.
@@ -55,40 +56,37 @@ export async function sampleContacts(ws: string, listId: string, limit = 50) {
   return rows;
 }
 
-export interface UploadResult {
+export interface CheckResult {
   rows: number;
-  added: number;
-  updated: number;
+  valid: number;
   duplicates_in_file: number;
   invalid: number;
   invalid_samples: { row: number; value: string }[];
   phone_column: string;
   attribute_columns: string[];
+  preview: { phone: string; attributes: Record<string, string> }[];
 }
 
-// Upserts contacts from CSV. The phone column is found by header name, else the first column is used.
-// Every other column becomes a contact attribute that templates can use as {{column}}.
-export async function importCsv(listId: string, csv: string): Promise<UploadResult | { error: string }> {
-  let records: string[][];
-  try {
-    records = parse(csv, { skip_empty_lines: true, trim: true, bom: true, relax_column_count: true });
-  } catch (err) {
-    return { error: `could not read CSV: ${(err as Error).message}` };
-  }
-  if (records.length < 2) return { error: 'CSV needs a header row and at least one contact' };
+export interface UploadResult extends Omit<CheckResult, 'valid' | 'preview'> {
+  added: number;
+  updated: number;
+}
 
+// Reads header + rows into contacts. Every column other than the phone column becomes an
+// attribute that templates use as {{column}} (lower case, spaces turned into underscores).
+export function checkRecords(records: string[][]): { result: CheckResult; contacts: Map<string, Record<string, string>> } | { error: string } {
+  if (records.length < 2) return { error: 'The file needs a header row and at least one contact.' };
   const header = records[0].map((h) => h.trim());
-  let phoneIdx = header.findIndex((h) => PHONE_HEADERS.includes(h.toLowerCase()));
-  if (phoneIdx === -1) phoneIdx = 0;
-  const attrCols = header
-    .map((h, i) => ({ key: h.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, ''), i }))
-    .filter((c) => c.i !== phoneIdx && c.key);
+  const phoneIdx = header.findIndex((h) => PHONE_HEADERS.includes(headerKey(h)));
+  if (phoneIdx === -1) {
+    return { error: `No phone column found. Name the column with the Truecaller numbers "phone" (also accepted: ${PHONE_HEADERS.slice(1).join(', ')}).` };
+  }
+  const attrCols = header.map((h, i) => ({ key: headerKey(h), i })).filter((c) => c.i !== phoneIdx && c.key);
 
-  const seen = new Map<string, Record<string, string>>();
+  const contacts = new Map<string, Record<string, string>>();
   const invalid: { row: number; value: string }[] = [];
   let invalidCount = 0;
   let dupes = 0;
-
   records.slice(1).forEach((r, n) => {
     const phone = normalizePhone(r[phoneIdx] ?? '');
     if (!phone) {
@@ -96,12 +94,33 @@ export async function importCsv(listId: string, csv: string): Promise<UploadResu
       if (invalid.length < 20) invalid.push({ row: n + 2, value: r[phoneIdx] ?? '' });
       return;
     }
-    if (seen.has(phone)) dupes++;
-    seen.set(phone, Object.fromEntries(attrCols.map((c) => [c.key, r[c.i] ?? ''])));
+    if (contacts.has(phone)) dupes++;
+    contacts.set(phone, Object.fromEntries(attrCols.map((c) => [c.key, r[c.i] ?? ''])));
   });
 
-  const phones = [...seen.keys()];
-  const attrs = phones.map((p) => JSON.stringify(seen.get(p)));
+  return {
+    contacts,
+    result: {
+      rows: records.length - 1,
+      valid: contacts.size,
+      duplicates_in_file: dupes,
+      invalid: invalidCount,
+      invalid_samples: invalid,
+      phone_column: header[phoneIdx],
+      attribute_columns: attrCols.map((c) => c.key),
+      preview: [...contacts].slice(0, 5).map(([phone, attributes]) => ({ phone, attributes })),
+    },
+  };
+}
+
+// Upserts contacts into a list. Re-uploading a number updates its attributes.
+export async function importRecords(listId: string, records: string[][]): Promise<UploadResult | { error: string }> {
+  const checked = checkRecords(records);
+  if ('error' in checked) return checked;
+  const { contacts, result } = checked;
+
+  const phones = [...contacts.keys()];
+  const attrs = phones.map((p) => JSON.stringify(contacts.get(p)));
   let added = 0;
   const client = await pool.connect();
   try {
@@ -118,7 +137,7 @@ export async function importCsv(listId: string, csv: string): Promise<UploadResu
     }
     await client.query(
       `UPDATE contact_lists SET columns = ARRAY(SELECT DISTINCT unnest(columns || $2::text[]) ORDER BY 1) WHERE id = $1`,
-      [listId, attrCols.map((c) => c.key)],
+      [listId, result.attribute_columns],
     );
     await client.query('COMMIT');
   } catch (err) {
@@ -128,14 +147,6 @@ export async function importCsv(listId: string, csv: string): Promise<UploadResu
     client.release();
   }
 
-  return {
-    rows: records.length - 1,
-    added,
-    updated: phones.length - added,
-    duplicates_in_file: dupes,
-    invalid: invalidCount,
-    invalid_samples: invalid,
-    phone_column: header[phoneIdx],
-    attribute_columns: attrCols.map((c) => c.key),
-  };
+  const { valid: _v, preview: _p, ...rest } = result;
+  return { ...rest, added, updated: phones.length - added };
 }
