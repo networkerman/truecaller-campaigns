@@ -300,6 +300,7 @@ export interface Sender {
   category: Category;
   status: 'active' | 'paused';
   created_at: string;
+  has_credential?: boolean;
 }
 
 export interface SenderRequest {

@@ -98,6 +98,8 @@ Add endpoints on the dashboard's Webhooks page. Events: `message.sent`, `message
 
 Truecaller senders are registered by OneXtel by hand. Customers request one on the Senders page; a super admin adds it once Truecaller has verified it. A workspace with senders can only send from its active ones. One without any uses `TC_SENDER_ID`.
 
+Business Chat API v2 has no sender field: Truecaller sends as whoever owns the API key. Give each extra sender its key in `TC_SENDER_KEYS` (`SENDER=key,SENDER2=key2`); senders without one use `TC_API_KEY`. Super admins see a warning on the Senders page for any sender with no key.
+
 ## Campaign guardrails
 
 Applied per contact when a campaign sends, based on Truecaller's promo sender rules:

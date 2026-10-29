@@ -7,6 +7,11 @@ export const config = {
   tc: {
     baseUrl: env.TC_API_BASE_URL ?? '',
     apiKey: env.TC_API_KEY ?? '',
+    // v2 has no sender field: each sender is its own Truecaller credential. SENDER=key pairs,
+    // comma separated. Senders without one use TC_API_KEY.
+    senderKeys: Object.fromEntries(
+      (env.TC_SENDER_KEYS ?? '').split(',').map((p) => p.trim().split('=')).filter((p) => p.length === 2 && p[0] && p[1]).map(([s, k]) => [s.trim(), k.trim()]),
+    ) as Record<string, string>,
     senderId: env.TC_SENDER_ID ?? 'DEMO',
     webhookSecret: env.TC_WEBHOOK_SECRET ?? '',
     // Business Chat API v2 .proto files from the Truecaller partner portal (kept out of git).

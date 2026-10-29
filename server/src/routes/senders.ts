@@ -43,7 +43,8 @@ export async function senderRoutes(app: FastifyInstance) {
       ),
     ]);
     return {
-      data: senders.rows,
+      // Super admins see which senders still need a Truecaller key on the server.
+      data: senders.rows.map((r) => (req.ctx.superAdmin ? { ...r, has_credential: Boolean(config.tc.senderKeys[r.sender_id] || config.tc.apiKey) } : r)),
       requests: requests.rows,
       default_sender: config.tc.senderId,
       contact: { name: config.senderContactName, email: config.senderContactEmail || null },

@@ -60,7 +60,10 @@ export function SendersPage({ canRequest }: { canRequest: boolean }) {
               {data.data.map((s) => (
                 <tr key={s.id} className="static">
                   <td className="strong">{s.display_name}</td>
-                  <td><code>{s.sender_id}</code></td>
+                  <td>
+                    <code>{s.sender_id}</code>
+                    {s.has_credential === false && <div className="hint bad">No Truecaller key on the server yet</div>}
+                  </td>
                   <td><span className={`chip cat-${s.category}`}>{s.category}</span></td>
                   <td className="muted">{when(s.created_at)}</td>
                   <td><span className={`status ${s.status === 'active' ? 'st-approved' : 'st-draft'}`}>{s.status}</span></td>
