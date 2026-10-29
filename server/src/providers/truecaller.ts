@@ -9,9 +9,11 @@ import type { MessageStatus, MessagingProvider, SendRequest, StatusUpdate } from
 // v2 has one send method (BusinessSendMessage) and reports delivery through webhooks only.
 //
 // The .proto files come from Truecaller's partner portal and are not kept in this repo.
-// Put them in TC_PROTO_DIR on the box. Field names below follow the v2 announcement
-// (flat recipient.phone_number, deduplication_id, ttl_seconds, timestamp in the reply) and
-// must be checked against the protos once they are in hand: see buildSendRequest().
+// Put the package's folders in TC_PROTO_DIR on the box, as shipped (checked against 1.0.1805):
+//   business-api/truecaller/messenger/business/v2/business_api_v2.proto
+//   modal-form-business-api/truecaller/messenger/business/modal_form_api_models.proto
+// The v2 proto imports the modal form one by its package path, so each top-level folder is
+// an include root.
 
 const SERVICE = 'truecaller.messenger.business.v2.BusinessApi';
 
@@ -32,7 +34,8 @@ function getClient() {
     throw new Error(`No Truecaller .proto files found in ${protoDir}. Download them from the partner portal and set TC_PROTO_DIR.`);
   }
 
-  const def = protoLoader.loadSync(protoFiles(protoDir), { keepCase: true, longs: String, enums: String, defaults: true, oneofs: true, includeDirs: [protoDir] });
+  const roots = [protoDir, ...readdirSync(protoDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => join(protoDir, d.name))];
+  const def = protoLoader.loadSync(protoFiles(protoDir), { keepCase: true, longs: String, enums: String, defaults: true, oneofs: true, includeDirs: roots });
   const pkg = grpc.loadPackageDefinition(def);
   const Service = SERVICE.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], pkg) as grpc.ServiceClientConstructor | undefined;
   if (!Service) throw new Error(`${SERVICE} not found in the .proto files in ${protoDir}`);
@@ -44,14 +47,21 @@ function getClient() {
   return client!;
 }
 
-// v2 request shape as announced. Confirm the content field names against the proto.
+// deduplication_id is an int64. Our message ids are random UUIDs, so the first 63 bits of
+// the id give a stable number: a retried send of the same message reuses it.
+export function dedupId(messageId: string) {
+  return (BigInt('0x' + messageId.replace(/-/g, '').slice(0, 16)) & 0x7fffffffffffffffn).toString();
+}
+
+// BusinessSendMessage.Request from business_api_v2.proto. There is no sender field: the
+// sender is whoever the API key belongs to (see apiKeyFor).
 export function buildSendRequest(req: SendRequest) {
   return {
-    deduplication_id: req.messageId, // our message id, so a retried send is not delivered twice
-    sender_id: req.senderId,
-    recipient: { phone_number: req.to },
+    deduplication_id: dedupId(req.messageId),
+    recipient: { phone_number: req.to.replace(/\D/g, '') }, // int64, country code included, no '+'
+    content: { text: req.body },
     ttl_seconds: config.tc.ttlSeconds,
-    content: { text: req.body }, // rich text is always on in v2
+    campaign_id: req.campaignId ?? '',
   };
 }
 
