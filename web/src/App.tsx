@@ -194,42 +194,59 @@ function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   );
 }
 
-const FEATURES = [
-  { tone: 'mint', title: 'Verified sender', text: 'Your brand name and verified badge on every message.',
-    icon: <path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3zm-3 9l2 2 4-4" /> },
-  { tone: 'sky', title: 'Personal, from Excel', text: 'Upload a sheet and every column fills a {{variable}}, with defaults for blanks.',
-    icon: <path d="M4 4h16v16H4zM4 9h16M9 9v11" /> },
-  { tone: 'peach', title: 'Reports that add up', text: 'Delivered, read and clicked, with timings and a reason for every failure.',
-    icon: <path d="M5 20V10M10 20V4M15 20v-7M20 20v-4" /> },
-  { tone: 'lilac', title: 'Scheduled and safe', text: 'Send now or later. Opt-outs and promotional limits are applied for you.',
-    icon: <path d="M4 7h16v13H4zM8 3v4M16 3v4M12 11v4l2 2" /> },
+const STEPS_INFO = [
+  { n: '1', title: 'Upload your list', text: 'Excel or CSV. Each column fills a {{variable}}.' },
+  { n: '2', title: 'Send from a verified sender', text: 'Your name and badge, right in Truecaller.' },
+  { n: '3', title: 'Watch it land', text: 'Delivered, read and clicked, with timings.' },
 ];
 
-// Left half of the sign-in screen: what the product does, with a sample message.
+// Left half of the sign-in screen, in the Aura (WARCS) look: soft red gradient, steps and a phone.
 function Showcase() {
   return (
     <section className="showcase" aria-label="About Truecaller campaigns">
-      <p className="eyebrow">Truecaller business messaging</p>
-      <h2>Verified messages, on the screen your customers already trust.</h2>
-      <p className="lede">Plan, personalise, send and measure Truecaller campaigns from one OneXtel workspace.</p>
-      <div className="feature-grid">
-        {FEATURES.map((f) => (
-          <div key={f.title} className={`feature ${f.tone}`}>
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{f.icon}</svg>
-            <b>{f.title}</b>
-            <span>{f.text}</span>
-          </div>
-        ))}
+      <div className="showcase-copy">
+        <p className="eyebrow">OneXtel × Truecaller</p>
+        <h2>Reach people where they check who's calling.</h2>
+        <p className="lede">Business messages that arrive in Truecaller with your verified name, sent and tracked from your OneXtel workspace.</p>
+        <ol className="how">
+          {STEPS_INFO.map((s) => (
+            <li key={s.n}><span className="how-n">{s.n}</span><div><b>{s.title}</b><span>{s.text}</span></div></li>
+          ))}
+        </ol>
       </div>
-      <div className="mock-chat" aria-hidden="true">
-        <div className="mock-head">
-          <span className="avatar">YB</span>
-          <div><b>Your Brand</b> <span className="tick">✓</span><div className="muted small">Verified business</div></div>
-        </div>
-        <div className="mock-bubble">Hi Asha, a quick safety reminder: never share OTPs or card details from unexpected messages or calls.</div>
-        <div className="mock-meta">Delivered · Read</div>
-      </div>
+      <TruecallerPhone />
     </section>
+  );
+}
+
+// A drawn phone showing a business chat as Truecaller presents it. Swap for a real screenshot when there is one.
+function TruecallerPhone() {
+  return (
+    <div className="phone-frame" aria-hidden="true">
+      <div className="phone-notch" />
+      <div className="tc-status"><span>9:41</span><span>●●● ▮</span></div>
+      <div className="tc-bar">
+        <span className="tc-back">‹</span>
+        <span className="tc-avatar">OX</span>
+        <div className="tc-who">
+          <b>OneXtel <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="11" fill="#0087ff" /><path d="M7 12.5l3 3 7-7" stroke="#fff" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></b>
+          <span>Verified business</span>
+        </div>
+      </div>
+      <div className="tc-chat">
+        <div className="tc-day">Today</div>
+        <div className="tc-msg">
+          Hi Asha, a quick safety reminder: never open links or share OTPs, PINs or card details from unexpected messages or calls.
+          <span className="tc-time">10:42</span>
+        </div>
+        <div className="tc-msg">
+          Your order <b>OX1002</b> has shipped and arrives by Saturday.
+          <span className="tc-link">Track order</span>
+          <span className="tc-time">10:44 ✓✓</span>
+        </div>
+      </div>
+      <div className="tc-foot">Business chat on Truecaller</div>
+    </div>
   );
 }
 
