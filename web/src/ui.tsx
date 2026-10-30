@@ -3,8 +3,8 @@ import type { Button, Media } from './api';
 import { OnextelCurve } from './OnextelLogo';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
-// The Truecaller API reference in the OneXtel docs (Mintlify).
-export const DOCS_URL = 'https://docs.onextel.com/api-reference/truecaller';
+// The Truecaller API reference in the OneXtel docs (Mintlify). docs.onextel.com is still the old site.
+export const DOCS_URL = 'https://onextel-09023014.mintlify.app/api-reference/truecaller';
 
 export const fmt = (n: number) => n.toLocaleString('en-IN');
 export const when = (s: string | null) => (s ? new Date(s).toLocaleString() : '—');
