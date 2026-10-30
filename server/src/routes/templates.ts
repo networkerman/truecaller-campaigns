@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireAuth, requirePermission } from '../auth.js';
-import { config } from '../config.js';
 import {
   createTemplate,
   deleteTemplate,
@@ -66,7 +65,8 @@ export async function templateRoutes(app: FastifyInstance) {
     return reply.code(204).send();
   });
 
-  // Submits for approval. Mock mode approves straight away; the real flow depends on the Truecaller API.
+  // Submits for approval. Approved straight away: Truecaller Business Chat v2 sends free text and has
+  // no template review, so there is nothing to wait for on either provider.
   app.post('/v1/templates/:id/submit', manage, async (req, reply) => {
     const p = Id.safeParse(req.params);
     const t = p.success ? await getTemplate(req.ctx.workspaceId, p.data.id) : null;
@@ -74,7 +74,7 @@ export async function templateRoutes(app: FastifyInstance) {
     if (t.status !== 'draft' && t.status !== 'rejected') {
       return reply.code(409).send({ error: `template is already ${t.status}` });
     }
-    return setTemplateStatus(t.id, config.provider === 'mock' ? 'approved' : 'submitted');
+    return setTemplateStatus(t.id, 'approved');
   });
 
   app.post('/v1/templates/:id/preview', view, async (req, reply) => {
