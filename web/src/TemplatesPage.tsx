@@ -25,6 +25,13 @@ export function TemplatesPage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | Template['status']>('all');
+  const [layout, setLayoutState] = useState<'grid' | 'list'>(() => {
+    try { return localStorage.getItem('templates.layout') === 'list' ? 'list' : 'grid'; } catch { return 'grid'; }
+  });
+  const setLayout = (l: 'grid' | 'list') => {
+    setLayoutState(l);
+    try { localStorage.setItem('templates.layout', l); } catch { /* private mode: keep it for this visit only */ }
+  };
   const [editing, setEditing] = useState<Editing>(null);
 
   const load = () =>
@@ -61,11 +68,15 @@ export function TemplatesPage() {
             </button>
           ))}
         </div>
+        <div className="tabs layout-toggle" role="group" aria-label="Layout">
+          <button className={layout === 'grid' ? 'tab on' : 'tab'} onClick={() => setLayout('grid')} aria-pressed={layout === 'grid'} title="Grid">▦ Grid</button>
+          <button className={layout === 'list' ? 'tab on' : 'tab'} onClick={() => setLayout('list')} aria-pressed={layout === 'list'} title="List">☰ List</button>
+        </div>
       </div>
 
       {error && <div className="banner error">{error}</div>}
 
-      <div className="card">
+      <div className={layout === 'grid' && !loading && shown.length > 0 ? '' : 'card'}>
         {loading ? (
           <p className="empty">Loading templates…</p>
         ) : shown.length === 0 ? (
@@ -80,6 +91,27 @@ export function TemplatesPage() {
             ) : (
               <p>No templates match this filter.</p>
             )}
+          </div>
+        ) : layout === 'grid' ? (
+          <div className="template-grid">
+            {shown.map((t) => (
+              <button key={t.id} className="template-card" onClick={() => setEditing({ mode: 'edit', template: t })}>
+                <TemplateThumb t={t} />
+                <div className="template-card-body">
+                  <div className="row-between">
+                    <span className="strong clip">{t.name}</span>
+                    <span className={`status st-${t.status}`}>{t.status}</span>
+                  </div>
+                  <div className="template-card-meta">
+                    <span className={`chip cat-${t.category}`}>{t.category}</span>
+                    <span className="chip">{typeOf(t)}</span>
+                  </div>
+                  <div className="muted small">
+                    {t.variables.length ? `Variables: ${t.variables.join(', ')}` : 'No variables'} · {new Date(t.updated_at).toLocaleDateString()}
+                  </div>
+                </div>
+              </button>
+            ))}
           </div>
         ) : (
           <table className="table">
@@ -304,6 +336,24 @@ function Editor({
           </button>
         </footer>
       </section>
+    </div>
+  );
+}
+
+// Top of a grid card: the image when there is one, otherwise the message as a chat bubble.
+function TemplateThumb({ t }: { t: Template }) {
+  const image = t.media?.mime_type.startsWith('image/') ? t.media.url : null;
+  return (
+    <div className={`template-thumb${image ? ' has-image' : ''}`}>
+      {image ? (
+        <img src={image} alt="" loading="lazy" />
+      ) : (
+        <div className="thumb-bubble">
+          {t.media && <div className="rich-file small">{t.media.mime_type.startsWith('video/') ? '▶ Video' : `📄 ${t.media.file_name || 'File'}`}</div>}
+          <div className="thumb-text">{t.body}</div>
+          {t.buttons?.length > 0 && <div className="thumb-buttons">{t.buttons.map((b, i) => <span key={i}>{b.text}</span>)}</div>}
+        </div>
+      )}
     </div>
   );
 }
