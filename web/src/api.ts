@@ -48,13 +48,15 @@ export interface Template {
   category: Category;
   body: string;
   variables: string[];
+  // Used when a contact's column for that variable is empty.
+  variable_defaults: Record<string, string>;
   status: TemplateStatus;
   reject_reason: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export type TemplateInput = Pick<Template, 'name' | 'category' | 'body'>;
+export type TemplateInput = Pick<Template, 'name' | 'category' | 'body'> & { variable_defaults?: Record<string, string> };
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await request(path, {
@@ -136,11 +138,26 @@ export interface Campaign {
   queued: number;
 }
 
+export interface ReasonCategory {
+  key: string;
+  label: string;
+  hint: string;
+  count: number;
+  reasons: { status: 'failed' | 'blocked'; reason: string; count: number }[];
+}
+
 export interface Report {
   campaign: Campaign;
-  funnel: { stage: string; count: number }[];
-  rates: { delivery_rate: number; read_rate: number; failure_rate: number; blocked_rate: number };
-  reasons: { status: 'failed' | 'blocked'; reason: string; count: number }[];
+  funnel: { stage: string; count: number; bad?: boolean }[];
+  rates: { delivery_rate: number; read_rate: number; click_rate: number | null; failure_rate: number; blocked_rate: number };
+  timing: {
+    avg_deliver_s: number | null; median_deliver_s: number | null;
+    avg_read_s: number | null; median_read_s: number | null;
+    avg_click_s: number | null; median_click_s: number | null;
+  };
+  clicks: { tracked: boolean; unique: number; total: number };
+  reasons: { status: 'failed' | 'blocked'; reason: string; count: number; category: string }[];
+  categories: ReasonCategory[];
   timeline: { minute: string; processed: number }[];
 }
 
@@ -192,7 +209,7 @@ export const lists = {
 export const campaigns = {
   all: () => call<{ data: Campaign[] }>('GET', '/v1/campaigns').then((r) => r.data),
   get: (id: string) => call<Campaign>('GET', `/v1/campaigns/${id}`),
-  create: (b: { name: string; template_id: string; list_id: string; sender_id?: string }) => call<Campaign>('POST', '/v1/campaigns', b),
+  create: (b: { name: string; template_id: string; list_id: string; sender_id?: string; variable_defaults?: Record<string, string>; track_links?: boolean }) => call<Campaign>('POST', '/v1/campaigns', b),
   launch: (id: string, scheduled_at?: string) => call<Campaign>('POST', `/v1/campaigns/${id}/launch`, scheduled_at ? { scheduled_at } : {}),
   cancel: (id: string) => call<Campaign>('POST', `/v1/campaigns/${id}/cancel`),
   remove: (id: string) => call<void>('DELETE', `/v1/campaigns/${id}`),

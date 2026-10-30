@@ -2,7 +2,7 @@
 {$DOMAIN} {
 	encode gzip
 
-	@api path /v1/* /webhooks/* /health
+	@api path /v1/* /webhooks/* /r/* /health
 	handle @api {
 		reverse_proxy api:3000
 	}

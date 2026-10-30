@@ -261,3 +261,24 @@ h1, h2, h3 { color: var(--navy); font-weight: 700; }
 .rq-rejected { background: var(--err-bg); color: var(--danger); }
 .signin { background: linear-gradient(160deg, var(--mist-soft), var(--mist)); }
 .page-head > .btn { white-space: nowrap; }
+
+/* Collapsible help under a page, e.g. webhook signature checks. */
+.docs-more { margin-top: 12px; }
+.docs-more > summary { cursor: pointer; color: var(--muted, #667); font-size: 14px; list-style: none; }
+.docs-more > summary::-webkit-details-marker { display: none; }
+.docs-more > summary::before { content: 'ⓘ '; }
+.docs-more[open] > summary { margin-bottom: 8px; }
+
+/* Failed and skipped rows under the funnel. */
+.funnel-row.first-bad { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.funnel-row.bad .funnel-bar { background: var(--danger); opacity: .75; }
+.funnel-row.bad .funnel-label { color: var(--danger); }
+
+.tiles.inner { margin: 8px 0; }
+.reasons { display: flex; flex-direction: column; gap: 6px; }
+.reason-group { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.reason-group > summary { display: flex; justify-content: space-between; cursor: pointer; list-style: none; }
+.reason-group > summary::-webkit-details-marker { display: none; }
+.reason-group > summary::before { content: '▸'; margin-right: 8px; color: var(--muted); }
+.reason-group[open] > summary::before { content: '▾'; }
+.reason-group > summary .strong { flex: 1; }

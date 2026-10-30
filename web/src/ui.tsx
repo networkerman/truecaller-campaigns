@@ -53,21 +53,26 @@ export function PageHead({ title, sub, action }: { title: string; sub: string; a
   );
 }
 
-export function Funnel({ steps }: { steps: { stage: string; count: number }[] }) {
+// Bad steps (failed, skipped) sit under the funnel and show their share of the first step.
+export function Funnel({ steps }: { steps: { stage: string; count: number; bad?: boolean }[] }) {
   const top = Math.max(steps[0]?.count ?? 0, 1);
   const testMode = useTestMode();
   return (
     <div className="funnel">
       {testMode && <p className="simulated">Simulated results: test mode, nothing was sent.</p>}
       {steps.map((s, i) => (
-        <div key={s.stage} className="funnel-row">
+        <div key={s.stage} className={`funnel-row${s.bad ? ' bad' : ''}${s.bad && !steps[i - 1]?.bad ? ' first-bad' : ''}`}>
           <span className="funnel-label">{s.stage}</span>
           <div className="funnel-track">
             <div className="funnel-bar" style={{ width: `${(s.count / top) * 100}%` }} />
           </div>
           <span className="funnel-num">
             {fmt(s.count)}
-            {i > 0 && <small> {steps[i - 1].count ? Math.round((s.count / steps[i - 1].count) * 100) : 0}%</small>}
+            {s.bad ? (
+              <small> {Math.round((s.count / top) * 100)}%</small>
+            ) : (
+              i > 0 && <small> {steps[i - 1].count ? Math.round((s.count / steps[i - 1].count) * 100) : 0}%</small>
+            )}
           </span>
         </div>
       ))}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type Category, type Template, type TemplateInput } from './api';
 
 const PLACEHOLDER = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
@@ -135,14 +135,19 @@ function Editor({
   onChanged: (t: Template | null) => void;
 }) {
   const [form, setForm] = useState<TemplateInput>(
-    template ? { name: template.name, category: template.category, body: template.body } : { name: '', category: 'promotional', body: '' },
+    template
+      ? { name: template.name, category: template.category, body: template.body, variable_defaults: { ...template.variable_defaults } }
+      : { name: '', category: 'promotional', body: '', variable_defaults: {} },
   );
-  const [samples, setSamples] = useState<Record<string, string>>({});
+  const defaults = form.variable_defaults ?? {};
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const vars = useMemo(() => variablesOf(form.body), [form.body]);
-  const dirty = !template || form.name !== template.name || form.category !== template.category || form.body !== template.body;
+  const sameDefaults = (a: Record<string, string>, b: Record<string, string>) =>
+    vars.every((v) => (a[v] ?? '').trim() === (b[v] ?? '').trim());
+  const dirty = !template || form.name !== template.name || form.category !== template.category || form.body !== template.body
+    || !sameDefaults(defaults, template.variable_defaults ?? {});
   const valid = form.name.trim() && form.body.trim() && form.body.length <= MAX_LEN;
   const canSubmit = template && !dirty && (template.status === 'draft' || template.status === 'rejected');
 
@@ -170,9 +175,15 @@ function Editor({
     if (confirm(`Delete "${template!.name}"? This can't be undone.`)) run(() => api.deleteTemplate(template!.id).then(() => null));
   };
 
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  // Inserts at the cursor. Name it after the Excel column that will fill it.
   const insertVar = () => {
-    const name = prompt('Variable name (letters, numbers, underscore)')?.trim();
-    if (name && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) setForm((f) => ({ ...f, body: `${f.body}{{${name}}}` }));
+    const raw = prompt('Variable name: use the column name from your Excel file, e.g. name or order_id')?.trim();
+    const name = raw?.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!name || !/^[a-z_][a-z0-9_]*$/.test(name)) return;
+    const el = bodyRef.current;
+    const at = el ? el.selectionStart : form.body.length;
+    setForm((f) => ({ ...f, body: `${f.body.slice(0, at)}{{${name}}}${f.body.slice(at)}` }));
   };
 
   return (
@@ -218,7 +229,7 @@ function Editor({
                 Message
                 <button type="button" className="link" onClick={insertVar}>+ Add variable</button>
               </span>
-              <textarea className="input" rows={7} value={form.body}
+              <textarea ref={bodyRef} className="input" rows={7} value={form.body}
                 placeholder={'Hi {{name}}, your order {{order_id}} is on the way. Track it here: {{link}}'}
                 onChange={(e) => setForm({ ...form, body: e.target.value })} />
               <span className={form.body.length > MAX_LEN ? 'hint bad' : 'hint'}>
@@ -228,12 +239,16 @@ function Editor({
 
             {vars.length > 0 && (
               <fieldset className="samples">
-                <legend>Sample values for preview</legend>
+                <legend>Default values</legend>
+                <p className="hint">
+                  Values come from the list column with the same name (e.g. a <code>name</code> column in your Excel fills {'{{name}}'}).
+                  The default is used when a contact's cell is empty. Leave it blank to skip those contacts instead.
+                </p>
                 {vars.map((v) => (
                   <label key={v} className="inline">
                     <code>{v}</code>
-                    <input className="input" value={samples[v] ?? ''} placeholder={`Sample ${v}`}
-                      onChange={(e) => setSamples({ ...samples, [v]: e.target.value })} />
+                    <input className="input" value={defaults[v] ?? ''} maxLength={200} placeholder={v === 'name' ? 'e.g. there' : 'Default value'}
+                      onChange={(e) => setForm({ ...form, variable_defaults: { ...defaults, [v]: e.target.value } })} />
                   </label>
                 ))}
               </fieldset>
@@ -251,7 +266,7 @@ function Editor({
                   <div className="verified">Verified business</div>
                 </div>
               </div>
-              <div className="bubble">{form.body ? fill(form.body, samples) : <span className="muted">Your message preview shows here</span>}</div>
+              <div className="bubble">{form.body ? fill(form.body, defaults) : <span className="muted">Your message preview shows here</span>}</div>
             </div>
           </div>
         </div>

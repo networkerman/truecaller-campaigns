@@ -69,6 +69,8 @@ function NewCampaign({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const [allLists, setLists] = useState<ContactList[]>([]);
   const [senderInfo, setSenderInfo] = useState<SendersResponse | null>(null);
   const [form, setForm] = useState({ name: '', template_id: '', sender_id: '', when: 'now', at: '' });
+  const [defaults, setDefaults] = useState<Record<string, string>>({});
+  const [trackClicks, setTrackClicks] = useState(true);
   const [audience, setAudience] = useState<Audience>(emptyAudience);
   // Keeps the list made from an upload, so a retry after an error doesn't import it twice.
   const imported = useRef<{ from: Audience; listId: string } | null>(null);
@@ -83,6 +85,13 @@ function NewCampaign({ onClose, onCreated }: { onClose: () => void; onCreated: (
   const t = templates.find((x) => x.id === form.template_id);
   const cohort = audience.mode === 'cohort' ? allLists.find((x) => x.id === audience.listId) : undefined;
   const recipients = cohort ? cohort.contact_count : audience.check?.valid ?? 0;
+  // Campaign defaults start from the template's and can be changed for this send only.
+  const pickTemplate = (id: string) => {
+    setForm({ ...form, template_id: id });
+    setDefaults({ ...(templates.find((x) => x.id === id)?.variable_defaults ?? {}) });
+  };
+  const sample = audience.check?.preview?.[0]?.attributes ?? {};
+  const hasLink = !!t && /https?:\/\//.test(t.body);
   const ready = form.name.trim() && t && (cohort || recipients > 0) && (form.when === 'now' || form.at);
 
   // A cohort is used as is. Any other source becomes a new contact list named after the campaign.
@@ -100,7 +109,10 @@ function NewCampaign({ onClose, onCreated }: { onClose: () => void; onCreated: (
       if (launch && form.when === 'later' && new Date(form.at).getTime() <= Date.now()) return setError('Pick a time in the future');
       if (launch && !confirm(form.when === 'now' ? `Send to ${fmt(recipients)} contacts now?` : `Schedule for ${new Date(form.at).toLocaleString()}?`)) return;
       const list_id = await resolveList();
-      const c = await campaigns.create({ name: form.name.trim(), template_id: form.template_id, list_id, sender_id: form.sender_id.trim() || undefined });
+      const c = await campaigns.create({
+        name: form.name.trim(), template_id: form.template_id, list_id, sender_id: form.sender_id.trim() || undefined,
+        variable_defaults: defaults, track_links: hasLink ? trackClicks : undefined,
+      });
       if (launch) await campaigns.launch(c.id, form.when === 'later' ? new Date(form.at).toISOString() : undefined);
       onCreated(c.id);
     });
@@ -127,7 +139,7 @@ function NewCampaign({ onClose, onCreated }: { onClose: () => void; onCreated: (
         </label>
         <label>
           Template
-          <select className="input" value={form.template_id} onChange={(e) => setForm({ ...form, template_id: e.target.value })}>
+          <select className="input" value={form.template_id} onChange={(e) => pickTemplate(e.target.value)}>
             <option value="">Choose a template</option>
             {templates.map((x) => (
               <option key={x.id} value={x.id} disabled={x.status !== 'approved'}>
@@ -137,7 +149,7 @@ function NewCampaign({ onClose, onCreated }: { onClose: () => void; onCreated: (
           </select>
           {templates.length > 0 && !templates.some((x) => x.status === 'approved') && <span className="hint bad">No approved templates yet. Submit one on the Templates page.</span>}
         </label>
-        <AudiencePicker value={audience} onChange={setAudience} cohorts={allLists} variables={t?.variables ?? []} />
+        <AudiencePicker value={audience} onChange={setAudience} cohorts={allLists} variables={(t?.variables ?? []).filter((v) => !defaults[v]?.trim())} />
         <label>
           Sender
           {activeSenders.length ? (
@@ -157,9 +169,28 @@ function NewCampaign({ onClose, onCreated }: { onClose: () => void; onCreated: (
           {form.when === 'later' && <input className="input" type="datetime-local" value={form.at} onChange={(e) => setForm({ ...form, at: e.target.value })} />}
         </fieldset>
 
+        {t && t.variables.length > 0 && (
+          <fieldset className="samples">
+            <legend>Personalisation</legend>
+            <p className="hint">Each {'{{variable}}'} is filled from the list column of the same name. The default is used when a contact's cell is empty.</p>
+            {t.variables.map((v) => (
+              <label key={v} className="inline">
+                <code>{v}</code>
+                <input className="input" value={defaults[v] ?? ''} placeholder="Default, e.g. Customer"
+                  onChange={(e) => setDefaults({ ...defaults, [v]: e.target.value })} />
+              </label>
+            ))}
+          </fieldset>
+        )}
+        {hasLink && (
+          <label className="inline">
+            <input type="checkbox" checked={trackClicks} onChange={(e) => setTrackClicks(e.target.checked)} />
+            Track link clicks (links go through a short redirect so clicks show in reports)
+          </label>
+        )}
         {t && (
           <div className="bubble preview-bubble">
-            {t.body.replace(VARS, (_, v: string) => `[${v}]`)}
+            {t.body.replace(VARS, (_, v: string) => (String(sample[v] ?? '').trim() || defaults[v]?.trim() || `[${v}]`))}
           </div>
         )}
         {t?.category === 'promotional' && (

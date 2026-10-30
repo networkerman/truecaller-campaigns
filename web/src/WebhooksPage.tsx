@@ -66,14 +66,15 @@ export function WebhooksPage() {
         )}
       </div>
 
-      <section className="card pad docs">
-        <h3>Verify each request</h3>
-        <p className="hint">
-          Every POST carries <code>x-onextel-signature: t=TIMESTAMP,v1=SIGNATURE</code>. SIGNATURE is the HMAC-SHA256 of
-          <code>TIMESTAMP.RAW_BODY</code> using the endpoint's signing secret. Reply with any 2xx within 10 seconds. Anything
-          else is retried up to {maxAttempts} times over about 8 hours.
-        </p>
-        <pre>{`import crypto from 'node:crypto';
+      <details className="docs-more">
+        <summary>Your endpoint must reply within 10 seconds and should check the signature. How to verify requests</summary>
+        <div className="card pad docs">
+          <p className="hint">
+            Every POST carries <code>x-onextel-signature: t=TIMESTAMP,v1=SIGNATURE</code>. SIGNATURE is the HMAC-SHA256 of
+            <code>TIMESTAMP.RAW_BODY</code> using the endpoint's signing secret. Reply with any 2xx within 10 seconds. Anything
+            else is retried up to {maxAttempts} times over about 8 hours.
+          </p>
+          <pre>{`import crypto from 'node:crypto';
 
 function verify(rawBody, header, secret) {
   const { t, v1 } = Object.fromEntries(header.split(',').map((p) => p.split('=')));
@@ -81,7 +82,8 @@ function verify(rawBody, header, secret) {
   const fresh = Math.abs(Date.now() / 1000 - Number(t)) < 300;
   return fresh && crypto.timingSafeEqual(Buffer.from(v1), Buffer.from(expected));
 }`}</pre>
-      </section>
+        </div>
+      </details>
 
       {editing && (
         <EndpointForm

@@ -15,6 +15,8 @@ const TemplateBody = z.object({
   name: z.string().trim().min(1).max(100),
   category: z.enum(['promotional', 'transactional', 'service']),
   body: z.string().trim().min(1).max(1000),
+  // Fallback per variable, used when a contact's column is empty, e.g. { "name": "there" }.
+  variable_defaults: z.record(z.string(), z.string().max(200)).optional(),
 });
 const Id = z.object({ id: z.string().uuid() });
 
@@ -83,7 +85,7 @@ export async function templateRoutes(app: FastifyInstance) {
     if (!t) return reply.code(404).send({ error: 'not found' });
     const values = z.record(z.string(), z.string()).safeParse((req.body as { values?: unknown } | undefined)?.values ?? {});
     if (!values.success) return reply.code(400).send({ error: 'values must be an object of strings' });
-    const out = render(t.body, values.data);
+    const out = render(t.body, values.data, t.variable_defaults);
     return 'error' in out ? reply.code(400).send(out) : out;
   });
 }

@@ -38,7 +38,7 @@ export async function messageRoutes(app: FastifyInstance, opts: { provider: Mess
       const t = await getTemplate(req.ctx.workspaceId, data.template_id);
       if (!t) return reply.code(400).send({ error: 'template not found' });
       if (t.status !== 'approved') return reply.code(400).send({ error: `template is ${t.status}, not approved` });
-      const out = render(t.body, data.variables);
+      const out = render(t.body, data.variables, t.variable_defaults);
       if ('error' in out) return reply.code(400).send(out);
       body = out.text;
       category = t.category;

@@ -71,8 +71,15 @@ server.registerTool('list_templates', {
 }, tool(() => call('GET', '/v1/templates')));
 
 server.registerTool('create_template', {
-  description: 'Create a template. Use {{name}} style placeholders for variables; they are filled from list columns. Submit it before use.',
-  inputSchema: { name: z.string(), category: Category, body: z.string().max(1000) },
+  description:
+    'Create a template. Use {{name}} style placeholders for variables; they are filled from list columns of the same name. ' +
+    'variable_defaults gives a fallback per variable for contacts whose cell is empty. Submit it before use.',
+  inputSchema: {
+    name: z.string(),
+    category: Category,
+    body: z.string().max(1000),
+    variable_defaults: z.record(z.string(), z.string()).optional(),
+  },
 }, tool((a) => call('POST', '/v1/templates', a)));
 
 server.registerTool('submit_template', {
@@ -136,7 +143,8 @@ server.registerTool('list_campaigns', {
 server.registerTool('create_campaign', {
   description:
     'Create a campaign from an approved template and a contact list. With launch=true it starts sending real messages ' +
-    'to the whole list right away (or at scheduled_at, ISO 8601). Without launch it stays a draft for launch_campaign.',
+    'to the whole list right away (or at scheduled_at, ISO 8601). Without launch it stays a draft for launch_campaign. ' +
+    'variable_defaults overrides the template defaults for this campaign. Links are click-tracked unless track_links=false.',
   inputSchema: {
     name: z.string(),
     template_id: z.string().uuid(),
@@ -144,6 +152,8 @@ server.registerTool('create_campaign', {
     sender_id: z.string().optional(),
     launch: z.boolean().optional(),
     scheduled_at: z.string().optional(),
+    variable_defaults: z.record(z.string(), z.string()).optional(),
+    track_links: z.boolean().optional(),
   },
 }, tool((a) => call('POST', '/v1/campaigns', a)));
 
@@ -163,7 +173,7 @@ server.registerTool('get_campaign', {
 }, tool((a) => call('GET', `/v1/campaigns/${a.campaign_id}`)));
 
 server.registerTool('campaign_report', {
-  description: 'Funnel (sent, delivered, read, failed), rates and failure reasons for a campaign.',
+  description: 'Funnel (sent, delivered, read, clicked, failed, skipped), rates, avg and median time to deliver/read/click, and failure reasons grouped by category.',
   inputSchema: { campaign_id: z.string().uuid() },
 }, tool((a) => call('GET', `/v1/campaigns/${a.campaign_id}/report`)));
 
