@@ -36,7 +36,7 @@ export function ReportsPage({ id, onSelect }: { id: string | null; onSelect: (id
       ) : !report ? (
         <div className="card"><p className="empty">Loading report…</p></div>
       ) : (
-        <>
+        <div className="report-body">
           <div className="report-head">
             <div>
               <h2>{report.campaign.name} <span className={`status cs-${report.campaign.status}`}>{report.campaign.status}</span></h2>
@@ -141,7 +141,7 @@ export function ReportsPage({ id, onSelect }: { id: string | null; onSelect: (id
               <p className="hint">Contacts processed per minute</p>
             </section>
           )}
-        </>
+        </div>
       )}
     </>
   );

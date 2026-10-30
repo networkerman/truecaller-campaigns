@@ -610,3 +610,8 @@ h1, h2, h3 { color: var(--ox-color-heading); }
 .doc-tile b { color: var(--ox-navy-900); font-family: var(--ox-font-family-heading); }
 .docs-links pre { margin: 0; }
 .sidebar nav a .ext { margin-left: auto; color: var(--muted); font-size: 12px; }
+
+/* Reports: the same 16px between every section. */
+.report-body { display: flex; flex-direction: column; gap: 16px; }
+.report-body > * { margin-top: 0; margin-bottom: 0; }
+.report-body > .grid-2 { margin: 0; }
