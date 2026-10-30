@@ -352,3 +352,7 @@ h1, h2, h3 { color: var(--navy); font-weight: 700; }
   .signin { grid-template-columns: 1fr; place-items: center; padding: 16px; }
   .showcase { display: none; }
 }
+
+/* Same gap above the funnel as between the drawer's other sections. */
+.drawer-section { margin-top: 24px; }
+.drawer-section > .funnel { margin-top: 0; }

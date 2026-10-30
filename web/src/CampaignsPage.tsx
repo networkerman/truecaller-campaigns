@@ -243,7 +243,13 @@ function CampaignDrawer({ id, onClose, onChanged }: { id: string; onClose: () =>
           </dl>
           <div className="progress big"><div style={{ width: `${c.recipients ? (c.processed / c.recipients) * 100 : 0}%` }} /></div>
           <p className="hint">{fmt(c.processed)} of {fmt(c.recipients)} contacts processed</p>
-          <Funnel steps={[{ stage: 'Recipients', count: c.recipients }, { stage: 'Sent', count: c.sent }, { stage: 'Delivered', count: c.delivered }, { stage: 'Read', count: c.read }]} />
+          <section className="drawer-section">
+            <Funnel steps={[
+              { stage: 'Recipients', count: c.recipients }, { stage: 'Sent', count: c.sent },
+              { stage: 'Delivered', count: c.delivered }, { stage: 'Read', count: c.read },
+              { stage: 'Failed', count: c.failed, bad: true }, { stage: 'Skipped', count: c.blocked, bad: true },
+            ]} />
+          </section>
           <div className="stat-row">
             <div className="stat"><span>Failed</span><b className="bad">{fmt(c.failed)}</b></div>
             <div className="stat"><span>Skipped by limits / opt-out</span><b>{fmt(c.blocked)}</b></div>
