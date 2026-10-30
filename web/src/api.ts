@@ -310,18 +310,41 @@ export const webhooks = {
 
 // ---- Senders ----
 
+export interface SenderStats {
+  sent: number;
+  delivered: number;
+  read: number;
+  failed: number;
+  not_on_truecaller: number;
+  promo_today: number;
+  last_sent_at: string | null;
+  delivery_rate: number | null;
+  read_rate: number | null;
+  unreachable_rate: number | null;
+  health: 'good' | 'watch' | 'poor' | 'not_enough_data';
+}
+
 export interface Sender {
   id: string;
   sender_id: string;
   display_name: string;
   category: Category;
   status: 'active' | 'paused';
+  tier: number;
+  daily_limit: number | null;
+  effective_daily_limit: number;
+  request_id: string | null;
+  stats: SenderStats | null;
   created_at: string;
   has_credential?: boolean;
 }
 
 export interface SenderRequest {
   id: string;
+  ref: string;
+  sample_message: string;
+  contact_email: string;
+  sender_id: string | null;
   display_name: string;
   legal_name: string;
   category: Category;
@@ -334,12 +357,14 @@ export interface SenderRequest {
   created_at: string;
 }
 
-export type SenderRequestInput = Pick<SenderRequest, 'display_name' | 'legal_name' | 'category' | 'website' | 'use_case' | 'monthly_volume'>;
+export type SenderRequestInput = Pick<SenderRequest, 'display_name' | 'legal_name' | 'category' | 'website' | 'use_case' | 'monthly_volume' | 'sample_message' | 'contact_email'>;
 
 export interface SendersResponse {
   data: Sender[];
   requests: SenderRequest[];
   default_sender: string;
+  default_sender_stats: SenderStats | null;
+  default_daily_limit: number;
   contact: { name: string; email: string | null };
   can_manage: boolean;
 }
@@ -347,8 +372,9 @@ export interface SendersResponse {
 export const senders = {
   all: () => call<SendersResponse>('GET', '/v1/senders'),
   request: (r: SenderRequestInput) => call<SenderRequest>('POST', '/v1/senders/requests', r),
-  add: (s: Pick<Sender, 'sender_id' | 'display_name' | 'category'>) => call<Sender>('POST', '/v1/senders', s),
+  add: (s: Pick<Sender, 'sender_id' | 'display_name' | 'category' | 'tier' | 'daily_limit'> & { request_id?: string }) => call<Sender>('POST', '/v1/senders', s),
   setStatus: (id: string, status: Sender['status']) => call<Sender>('PATCH', `/v1/senders/${id}`, { status }),
+  update: (id: string, p: Partial<Pick<Sender, 'tier' | 'daily_limit'>>) => call<Sender>('PATCH', `/v1/senders/${id}`, p),
   setRequestStatus: (id: string, status: SenderRequest['status'], note?: string) =>
     call<SenderRequest>('PATCH', `/v1/senders/requests/${id}`, { status, note }),
 };

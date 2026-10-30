@@ -282,3 +282,25 @@ h1, h2, h3 { color: var(--navy); font-weight: 700; }
 .reason-group > summary::before { content: '▸'; margin-right: 8px; color: var(--muted); }
 .reason-group[open] > summary::before { content: '▾'; }
 .reason-group > summary .strong { flex: 1; }
+
+/* Senders: one card per sender with health and today's limit. */
+.sender-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.sender-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 10px; background: var(--surface); }
+.sender-card.paused { opacity: .65; }
+.sender-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+.sender-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
+.sender-stats dt { font-size: 11px; color: var(--muted); }
+.sender-stats dd { margin: 0; font-weight: 600; }
+.limit-track { height: 6px; background: var(--mist-soft); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+.limit-track > div { height: 100%; background: var(--navy); }
+.sender-actions { display: flex; gap: 6px; }
+
+/* Request wizard. */
+.steps { display: flex; gap: 8px; list-style: none; padding: 0; margin: 0 0 4px; counter-reset: step; }
+.steps li { flex: 1; font-size: 12px; color: var(--muted); border-top: 3px solid var(--silver); padding-top: 6px; counter-increment: step; }
+.steps li::before { content: counter(step) '. '; }
+.steps li.on { color: var(--navy); border-color: var(--red); font-weight: 600; }
+.steps li.done { border-color: var(--navy); }
+.review { display: grid; grid-template-columns: 130px 1fr; gap: 8px 12px; margin: 0; }
+.review dt { color: var(--muted); font-size: 13px; }
+.review dd { margin: 0; white-space: pre-wrap; }

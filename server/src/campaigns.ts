@@ -234,9 +234,12 @@ async function sendBatch(provider: MessagingProvider, campaignId: string, batchS
        WHERE sender_id = $1 AND category = 'promotional' AND ${COUNTED} AND created_at >= ${TODAY_IST}`,
       [c.sender_id],
     );
-    room = Math.min(batchSize, guardrails.promoDailySenderLimit - rows[0].n);
+    // A sender's own limit (its Truecaller tier) wins over the platform default.
+    const lim = await pool.query(`SELECT daily_limit FROM senders WHERE workspace_id = $1 AND sender_id = $2`, [c.workspace_id, c.sender_id]);
+    const limit: number = lim.rows[0]?.daily_limit ?? guardrails.promoDailySenderLimit;
+    room = Math.min(batchSize, limit - rows[0].n);
     if (room <= 0) {
-      await setNote(c.id, `Daily promotional limit of ${guardrails.promoDailySenderLimit.toLocaleString('en-IN')} reached for sender ${c.sender_id}. Resumes tomorrow.`);
+      await setNote(c.id, `Daily promotional limit of ${limit.toLocaleString('en-IN')} reached for sender ${c.sender_id}. Resumes tomorrow.`);
       return;
     }
   }

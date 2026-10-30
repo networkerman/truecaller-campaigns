@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { audit, generateKey, requireAuth, requirePermission } from '../auth.js';
 import { pool } from '../db.js';
+import { sendApiKeyCreatedEmail } from '../mailer.js';
 
 export async function apiKeyRoutes(app: FastifyInstance) {
   app.addHook('onRequest', requireAuth);
@@ -26,6 +27,17 @@ export async function apiKeyRoutes(app: FastifyInstance) {
       [parsed.data.name, k.prefix, k.hash, req.ctx.workspaceId],
     );
     await audit(req.ctx, 'api_key.created', { id: rows[0].id, name: parsed.data.name, prefix: k.prefix });
+    // Tell the creator and the workspace's owners and admins, so an unexpected key gets noticed.
+    const people = await pool.query(
+      `SELECT u.id, u.email, u.name FROM memberships m JOIN users u ON u.id = m.user_id
+       WHERE m.workspace_id = $1 AND (m.role IN ('owner', 'admin') OR u.id = $2)`,
+      [req.ctx.workspaceId, req.ctx.userId],
+    );
+    const actor = people.rows.find((u) => u.id === req.ctx.userId)?.name ?? (req.ctx.userId ? 'A OneXtel admin' : 'An API key');
+    void sendApiKeyCreatedEmail(req.log, {
+      to: people.rows.map((u) => ({ email: u.email, name: u.name })),
+      actor, keyName: parsed.data.name, last4: k.key.slice(-4), createdAt: rows[0].created_at,
+    });
     return reply.code(201).send({ ...rows[0], key: k.key });
   });
 
