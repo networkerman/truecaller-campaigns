@@ -123,3 +123,36 @@ export function RichParts({ media, buttons, fill = (t: string) => t }: { media: 
     </>
   );
 }
+
+// A phone showing the message as a Truecaller business chat.
+export function TcPhone({ sender, text, media, buttons }: { sender: string; text: string; media?: Media | null; buttons?: Button[] }) {
+  const initials = sender.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || 'B';
+  return (
+    <div className="phone-frame">
+      <div className="phone-notch" />
+      <div className="tc-status"><span>10:42</span><span>●●● ▮</span></div>
+      <div className="tc-bar">
+        <span className="tc-back">‹</span>
+        <span className="tc-avatar">{initials}</span>
+        <div className="tc-who">
+          <b>{sender} <svg viewBox="0 0 24 24" width="14" height="14" aria-label="Verified"><circle cx="12" cy="12" r="11" fill="#0087ff" /><path d="M7 12.5l3 3 7-7" stroke="#fff" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></b>
+          <span>Verified business</span>
+        </div>
+      </div>
+      <div className="tc-chat">
+        <div className="tc-day">Today</div>
+        {text ? (
+          <div className="tc-msg">
+            {media?.mime_type.startsWith('image/') && <img className="tc-img" src={media.url} alt="" />}
+            {media && !media.mime_type.startsWith('image/') && <div className="rich-file small">{media.mime_type.startsWith('video/') ? '▶ Video' : `📄 ${media.file_name || 'File'}`}</div>}
+            <span className="tc-text">{text}</span>
+            <span className="tc-time">10:42</span>
+            {buttons?.map((b, i) => <span key={i} className="tc-link">{b.text}</span>)}
+          </div>
+        ) : (
+          <div className="tc-day">Pick a template to see the message</div>
+        )}
+      </div>
+    </div>
+  );
+}

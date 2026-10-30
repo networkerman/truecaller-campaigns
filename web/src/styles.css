@@ -387,3 +387,50 @@ h1, h2, h3 { color: var(--navy); font-weight: 700; }
 .template-card-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .template-card-body .clip { max-width: 70%; }
 .template-card-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* Campaign wizard: full page, steps on the left, form in the middle, preview or summary on the right. */
+.wizard { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: flex; flex-direction: column; }
+.wizard-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 28px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.wizard-head h2 { margin: 0; font-size: 18px; }
+.wizard-body { flex: 1; display: grid; grid-template-columns: 240px minmax(0, 1fr) 340px; min-height: 0; }
+.wizard-rail { background: var(--surface); border-right: 1px solid var(--line); padding: 28px 20px; display: flex; flex-direction: column; justify-content: space-between; }
+.wizard-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wizard-steps button { all: unset; cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 8px 4px; color: var(--muted); font-weight: 500; }
+.wizard-steps .wz-n { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--silver); display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+.wizard-steps li.on button { color: var(--navy); }
+.wizard-steps li.on .wz-n { border-color: var(--navy); color: var(--navy); }
+.wizard-steps li.done .wz-n { background: var(--navy); border-color: var(--navy); color: #fff; }
+.wizard-help { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 4px; }
+.wizard-main { overflow-y: auto; padding: 32px clamp(20px, 4vw, 56px); }
+.wizard-main .form { max-width: 760px; gap: 18px; }
+.wz-title { font-size: 22px; margin: 0; color: var(--navy-3); }
+.wizard-side { overflow-y: auto; padding: 28px 24px; border-left: 1px solid var(--line); background: var(--surface); display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.wizard-side .summary { width: 100%; }
+.wizard-side .summary dl { display: grid; gap: 4px 0; margin: 0; }
+.wizard-side .summary dt { color: var(--muted); font-size: 12px; margin-top: 8px; }
+.wizard-side .summary dd { margin: 0; font-weight: 600; }
+.wizard-foot { display: flex; align-items: center; padding: 12px 28px; background: var(--surface); border-top: 1px solid var(--line); }
+.choice-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 6px; }
+.choice-grid.two { grid-template-columns: 1fr 1fr; }
+.choice-card { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; cursor: pointer; background: var(--surface); }
+.choice-card > span { display: flex; flex-direction: column; gap: 3px; }
+.choice-card.on { border: 2px solid var(--navy); padding: 13px; background: var(--mist-soft); }
+.choice-card.disabled { cursor: not-allowed; opacity: .6; }
+.chip.soon { margin-left: 6px; font-size: 10px; background: var(--gold); color: #6b4a12; }
+.grid-2.tight { gap: 14px; }
+.review-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; background: var(--surface); display: flex; flex-direction: column; gap: 10px; }
+.check-row { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.check { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff; flex: none; }
+.check.ok { background: #067647; }
+.check.warn { background: #b54708; }
+.hint.ok { color: #067647; }
+.row-gap.center { align-items: center; }
+.center { text-align: center; }
+.tc-img { width: calc(100% + 22px); margin: -9px -11px 6px; border-radius: 4px 14px 0 0; display: block; max-height: 150px; object-fit: cover; }
+.tc-text { white-space: pre-wrap; }
+@media (max-width: 1100px) { .wizard-body { grid-template-columns: 200px minmax(0, 1fr); } .wizard-side { display: none; } }
+@media (max-width: 720px) { .wizard-body { grid-template-columns: 1fr; } .wizard-rail { display: none; } }
+.choice-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.choice-title .chip.soon { margin-left: 0; }
+.wizard-main .form > div > .label { margin-bottom: 4px; }
+.wizard-main .form { display: flex; flex-direction: column; gap: 18px; }

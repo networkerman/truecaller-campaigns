@@ -210,6 +210,12 @@ export async function downloadCsv(path: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+export const messages = {
+  // Sends one real message now, e.g. a test of a template before a campaign.
+  send: (b: { to: string; template_id: string; sender_id?: string; variables: Record<string, string> }) =>
+    call<{ id: string; status: string; error: string | null }>('POST', '/v1/messages', b),
+};
+
 export const lists = {
   all: () => call<{ data: ContactList[] }>('GET', '/v1/lists').then((r) => r.data),
   get: (id: string) => call<ListDetail>('GET', `/v1/lists/${id}`),
