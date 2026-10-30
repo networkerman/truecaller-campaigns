@@ -173,6 +173,7 @@ function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
 
   return (
     <div className="signin">
+      <Showcase />
       <form className="card signin-card" onSubmit={submit}>
         <Brand dark />
         <h1>Sign in</h1>
@@ -190,6 +191,45 @@ function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
         <p className="muted switch small">No account? Access is by invitation from your workspace Owner or OneXtel.</p>
       </form>
     </div>
+  );
+}
+
+const FEATURES = [
+  { tone: 'mint', title: 'Verified sender', text: 'Your brand name and verified badge on every message.',
+    icon: <path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3zm-3 9l2 2 4-4" /> },
+  { tone: 'sky', title: 'Personal, from Excel', text: 'Upload a sheet and every column fills a {{variable}}, with defaults for blanks.',
+    icon: <path d="M4 4h16v16H4zM4 9h16M9 9v11" /> },
+  { tone: 'peach', title: 'Reports that add up', text: 'Delivered, read and clicked, with timings and a reason for every failure.',
+    icon: <path d="M5 20V10M10 20V4M15 20v-7M20 20v-4" /> },
+  { tone: 'lilac', title: 'Scheduled and safe', text: 'Send now or later. Opt-outs and promotional limits are applied for you.',
+    icon: <path d="M4 7h16v13H4zM8 3v4M16 3v4M12 11v4l2 2" /> },
+];
+
+// Left half of the sign-in screen: what the product does, with a sample message.
+function Showcase() {
+  return (
+    <section className="showcase" aria-label="About Truecaller campaigns">
+      <p className="eyebrow">Truecaller business messaging</p>
+      <h2>Verified messages, on the screen your customers already trust.</h2>
+      <p className="lede">Plan, personalise, send and measure Truecaller campaigns from one OneXtel workspace.</p>
+      <div className="feature-grid">
+        {FEATURES.map((f) => (
+          <div key={f.title} className={`feature ${f.tone}`}>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{f.icon}</svg>
+            <b>{f.title}</b>
+            <span>{f.text}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mock-chat" aria-hidden="true">
+        <div className="mock-head">
+          <span className="avatar">YB</span>
+          <div><b>Your Brand</b> <span className="tick">✓</span><div className="muted small">Verified business</div></div>
+        </div>
+        <div className="mock-bubble">Hi Asha, a quick safety reminder: never share OTPs or card details from unexpected messages or calls.</div>
+        <div className="mock-meta">Delivered · Read</div>
+      </div>
+    </section>
   );
 }
 
@@ -217,6 +257,7 @@ function ChangePassword({ user, onDone }: { user: User; onDone: () => void }) {
 
   return (
     <div className="signin">
+      <Showcase />
       <form className="card signin-card" onSubmit={submit}>
         <Brand dark />
         <h1>Choose your password</h1>

@@ -304,3 +304,28 @@ h1, h2, h3 { color: var(--navy); font-weight: 700; }
 .review { display: grid; grid-template-columns: 130px 1fr; gap: 8px 12px; margin: 0; }
 .review dt { color: var(--muted); font-size: 13px; }
 .review dd { margin: 0; white-space: pre-wrap; }
+
+/* Sign-in: product panel beside the form on wide screens, form only on phones. */
+.signin { grid-template-columns: minmax(0, 1.2fr) auto; gap: 48px; padding: 40px clamp(16px, 5vw, 72px); align-items: center; }
+.showcase { max-width: 640px; }
+.showcase .eyebrow { color: var(--red); font-weight: 700; letter-spacing: .18em; text-transform: uppercase; font-size: 12px; margin: 0 0 12px; }
+.showcase h2 { font-size: clamp(28px, 3.4vw, 44px); line-height: 1.1; color: var(--navy-3); margin: 0 0 14px; letter-spacing: -.01em; }
+.showcase .lede { color: var(--muted); font-size: 16px; margin: 0 0 24px; }
+.feature-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.feature { border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 4px; color: var(--navy-3); }
+.feature b { margin-top: 6px; }
+.feature span { font-size: 13px; color: var(--muted); }
+.feature.mint { background: #e9f7ee; }
+.feature.sky { background: #e7f0fb; }
+.feature.peach { background: #fdeee8; }
+.feature.lilac { background: #eeeaf8; }
+.mock-chat { margin-top: 20px; max-width: 360px; background: var(--surface); border-radius: 16px; padding: 14px; box-shadow: 0 10px 30px rgba(37, 46, 106, .12); transform: rotate(-1.5deg); }
+.mock-head { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+.mock-head .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--navy); color: #fff; display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+.mock-head .tick { color: #1d72e8; font-size: 12px; }
+.mock-bubble { background: var(--mist-soft); border-radius: 12px; padding: 10px 12px; font-size: 14px; }
+.mock-meta { font-size: 11px; color: var(--muted); text-align: right; margin-top: 6px; }
+@media (max-width: 900px) {
+  .signin { grid-template-columns: 1fr; gap: 24px; place-items: center; }
+  .showcase { display: none; }
+}
