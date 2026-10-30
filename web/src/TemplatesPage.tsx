@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, MEDIA_TYPES, type Button, type Category, type Media, type MediaType, type Template, type TemplateInput } from './api';
-import { PageHead, RichParts } from './ui';
+import { PageHead, TcPreview } from './ui';
 
 const PLACEHOLDER = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
 const MAX_LEN = 1000;
@@ -302,19 +302,8 @@ function Editor({
           </div>
 
           <div className="preview">
-            <div className="phone">
-              <div className="phone-head">
-                <span className="avatar">B</span>
-                <div>
-                  <div className="strong">Your Brand</div>
-                  <div className="verified">Verified business</div>
-                </div>
-              </div>
-              <div className="bubble">
-                {form.body ? fill(form.body, defaults) : <span className="muted">Your message preview shows here</span>}
-                <RichParts media={form.media} buttons={buttons} fill={(t) => fill(t, defaults)} />
-              </div>
-            </div>
+            <TcPreview sender="Your brand" text={form.body ? fill(form.body, defaults) : ''} media={form.media}
+              buttons={buttons.map((b) => ({ ...b, text: fill(b.text, defaults) || (b.type === 'link' ? 'Link button' : 'Quick reply') }))} />
           </div>
         </div>
 

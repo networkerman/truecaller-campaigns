@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { api, campaigns, lists, messages, senders, type ContactList, type SendersResponse, type Template } from './api';
 import { AudiencePicker, audienceSource, emptyAudience, type Audience } from './Audience';
-import { TcPhone, fmt, useAsync, usePoll } from './ui';
+import { TcPreview, fmt, useAsync, usePoll } from './ui';
 
 const VARS = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
 const STEPS = ['Audience', 'Message', 'Schedule', 'Check and send'] as const;
@@ -264,8 +264,7 @@ export function CampaignWizard({ onClose, onCreated }: { onClose: () => void; on
         <aside className="wizard-side">
           {step === 1 || step === 3 ? (
             <>
-              <div className="label">Preview</div>
-              <TcPhone sender={senderLabel} text={t ? fill(t.body) : ''} media={t?.media} buttons={t?.buttons?.map((b) => ({ ...b, text: fill(b.text) }))} />
+              <TcPreview sender={senderLabel} text={t ? fill(t.body) : ''} media={t?.media} buttons={t?.buttons?.map((b) => ({ ...b, text: fill(b.text) }))} />
               {Object.keys(sample).length > 0 && <p className="hint center">Shown with the first contact's values.</p>}
             </>
           ) : (
