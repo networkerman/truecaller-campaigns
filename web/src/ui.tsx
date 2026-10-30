@@ -1,5 +1,6 @@
 import { useTestMode } from './testMode';
 import type { Button, Media } from './api';
+import { OnextelCurve } from './OnextelLogo';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 export const fmt = (n: number) => n.toLocaleString('en-IN');
@@ -42,15 +43,21 @@ export function Drawer({ title, badge, onClose, children, footer, narrow }: {
   );
 }
 
+// The V5 page header box: navy gradient, dot pattern and the red brand curve. The page's main
+// action sits under it on the right, like the design system's Broadcasts page.
 export function PageHead({ title, sub, action }: { title: string; sub: string; action?: ReactNode }) {
   return (
-    <header className="page-head">
-      <div>
-        <h1>{title}</h1>
-        <p className="muted">{sub}</p>
-      </div>
-      {action}
-    </header>
+    <>
+      <header className="page-head">
+        <OnextelCurve className="page-head-curve" />
+        <div className="page-head-text">
+          <div className="crumbs">Truecaller campaigns <span>/</span> <b>{title}</b></div>
+          <h1>{title}</h1>
+          <p>{sub}</p>
+        </div>
+      </header>
+      {action && <div className="page-actions">{action}</div>}
+    </>
   );
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, MEDIA_TYPES, type Button, type Category, type Media, type MediaType, type Template, type TemplateInput } from './api';
-import { RichParts } from './ui';
+import { PageHead, RichParts } from './ui';
 
 const PLACEHOLDER = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
 const MAX_LEN = 1000;
@@ -49,15 +49,11 @@ export function TemplatesPage() {
 
   return (
     <>
-      <header className="page-head">
-        <div>
-          <h1>Templates</h1>
-          <p className="muted">Reusable messages for campaigns and the API. Only approved templates can be sent.</p>
-        </div>
-        <button className="btn primary" onClick={() => setEditing({ mode: 'new' })}>
-          New template
-        </button>
-      </header>
+      <PageHead
+        title="Templates"
+        sub="Reusable messages for campaigns and the API. Only approved templates can be sent."
+        action={<button className="btn primary" onClick={() => setEditing({ mode: 'new' })}>New template</button>}
+      />
 
       <div className="toolbar">
         <input className="input" placeholder="Search by name" value={query} onChange={(e) => setQuery(e.target.value)} />
