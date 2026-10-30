@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { api, campaigns, lists, senders, type Campaign, type ContactList, type SendersResponse, type Template } from './api';
 import { AudiencePicker, audienceSource, emptyAudience, type Audience } from './Audience';
-import { Drawer, Funnel, PageHead, fmt, useAsync, usePoll, when } from './ui';
+import { Drawer, Funnel, PageHead, RichParts, fmt, useAsync, usePoll, when } from './ui';
 
 const LIVE = ['running', 'scheduled'];
 const VARS = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
@@ -91,7 +91,7 @@ function NewCampaign({ onClose, onCreated }: { onClose: () => void; onCreated: (
     setDefaults({ ...(templates.find((x) => x.id === id)?.variable_defaults ?? {}) });
   };
   const sample = audience.check?.preview?.[0]?.attributes ?? {};
-  const hasLink = !!t && /https?:\/\//.test(t.body);
+  const hasLink = !!t && (/https?:\/\//.test(t.body) || (t.buttons ?? []).some((b) => b.type === 'link'));
   const ready = form.name.trim() && t && (cohort || recipients > 0) && (form.when === 'now' || form.at);
 
   // A cohort is used as is. Any other source becomes a new contact list named after the campaign.
@@ -191,6 +191,8 @@ function NewCampaign({ onClose, onCreated }: { onClose: () => void; onCreated: (
         {t && (
           <div className="bubble preview-bubble">
             {t.body.replace(VARS, (_, v: string) => (String(sample[v] ?? '').trim() || defaults[v]?.trim() || `[${v}]`))}
+            <RichParts media={t.media} buttons={t.buttons}
+              fill={(x) => x.replace(VARS, (_, v: string) => String(sample[v] ?? '').trim() || defaults[v]?.trim() || `[${v}]`)} />
           </div>
         )}
         {t?.category === 'promotional' && (
@@ -254,7 +256,7 @@ function CampaignDrawer({ id, onClose, onChanged }: { id: string; onClose: () =>
             <div className="stat"><span>Failed</span><b className="bad">{fmt(c.failed)}</b></div>
             <div className="stat"><span>Skipped by limits / opt-out</span><b>{fmt(c.blocked)}</b></div>
           </div>
-          <div className="bubble preview-bubble">{c.template_body}</div>
+          <div className="bubble preview-bubble">{c.template_body}<RichParts media={c.template_media} buttons={c.template_buttons} /></div>
         </div>
       )}
     </Drawer>

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import { config } from '../config.js';
+import { toContent } from '../rich.js';
 import type { MessageStatus, MessagingProvider, SendRequest, StatusUpdate } from './types.js';
 
 // Truecaller Business Chat API v2: gRPC service truecaller.messenger.business.v2.BusinessApi.
@@ -61,7 +62,7 @@ export function buildSendRequest(req: SendRequest) {
   return {
     deduplication_id: dedupId(req.messageId),
     recipient: { phone_number: req.to.replace(/\D/g, '') }, // int64, country code included, no '+'
-    content: { text: req.body },
+    content: toContent(req.body, req.media, req.actions),
     ttl_seconds: config.tc.ttlSeconds,
     campaign_id: req.campaignId ?? '',
   };
@@ -127,6 +128,22 @@ export function parseV2Webhook(body: unknown): StatusUpdate[] {
   return out;
 }
 
+// messageActionPerformed (link button taps, actionTag) and messageSent (user replies; a tapped
+// quick reply carries content.action_tag). Dates are epoch seconds.
+export function parseV2Taps(body: unknown): { tag: string; at: Date }[] {
+  const events = Array.isArray((body as { events?: unknown })?.events) ? (body as { events: unknown[] }).events : [];
+  const out: { tag: string; at: Date }[] = [];
+  for (const e of events) {
+    const ev = (e ?? {}) as Record<string, Record<string, unknown> | undefined>;
+    const tap = ev.messageActionPerformed;
+    const reply = ev.messageSent;
+    const tag = tap ? tap.actionTag ?? tap.action_tag : (reply?.content as Record<string, unknown> | undefined)?.action_tag;
+    const date = Number((tap ?? reply)?.date);
+    if (typeof tag === 'string' && tag) out.push({ tag, at: Number.isFinite(date) && date > 0 ? new Date(date * 1000) : new Date() });
+  }
+  return out;
+}
+
 export function createTruecallerProvider(): MessagingProvider {
   return {
     name: 'truecaller',
@@ -137,5 +154,6 @@ export function createTruecallerProvider(): MessagingProvider {
       return { providerMessageId: id, status: 'sent' };
     },
     parseWebhook: parseV2Webhook,
+    parseTaps: parseV2Taps,
   };
 }

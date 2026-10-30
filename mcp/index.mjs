@@ -23,12 +23,12 @@ function apiKey() {
   }
 }
 
-async function call(method, path, body, contentType = 'application/json') {
+async function call(method, path, body, contentType = 'application/json', extraHeaders = {}) {
   const key = apiKey();
   if (!key) throw new Error(`No API key. Run mcp/login.sh to store a workspace API key in the Keychain (service "${KEYCHAIN_SERVICE}").`);
   const res = await fetch(BASE_URL + path, {
     method,
-    headers: { 'x-api-key': key, ...(body !== undefined ? { 'content-type': contentType } : {}) },
+    headers: { 'x-api-key': key, ...(body !== undefined ? { 'content-type': contentType } : {}), ...extraHeaders },
     body: body === undefined ? undefined : contentType === 'application/json' ? JSON.stringify(body) : body,
   });
   const text = await res.text();
@@ -70,15 +70,43 @@ server.registerTool('list_templates', {
   inputSchema: {},
 }, tool(() => call('GET', '/v1/templates')));
 
+const Media = z.object({
+  url: z.string().describe('Public https URL of the file (upload_media returns one)'),
+  mime_type: z.enum(['image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime', 'application/pdf', 'text/plain']),
+  file_name: z.string().optional().describe('Shown to the recipient for PDFs and text files'),
+});
+const Buttons = z.array(z.union([
+  z.object({ type: z.literal('link'), text: z.string().max(40), url: z.string().describe('https URL or app deep link; {{variables}} allowed') }),
+  z.object({ type: z.literal('reply'), text: z.string().max(100) }),
+])).max(3);
+
+// A non-JSON body, e.g. a file upload, with its own headers.
+const raw = (method, path, body, headers) => call(method, path, body, headers['content-type'], headers);
+
+server.registerTool('upload_media', {
+  description: 'Upload a local image (JPEG/PNG/GIF), video (MP4/MOV) or file (PDF/TXT), up to 20 MB, for use as template media. Returns { url, mime_type, file_name }.',
+  inputSchema: { path: z.string().describe('Local file path') },
+}, tool(async (a) => {
+  const { readFile } = await import('node:fs/promises');
+  const { basename, extname } = await import('node:path');
+  const types = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.pdf': 'application/pdf', '.txt': 'text/plain' };
+  const type = types[extname(a.path).toLowerCase()];
+  if (!type) throw new Error('Unsupported file type. Use jpg, png, gif, mp4, mov, pdf or txt.');
+  return raw('POST', '/v1/media', await readFile(a.path), { 'content-type': type, 'x-file-name': encodeURIComponent(basename(a.path)) });
+}));
+
 server.registerTool('create_template', {
   description:
     'Create a template. Use {{name}} style placeholders for variables; they are filled from list columns of the same name. ' +
+    'Optional media (one image, video or file) and up to 3 buttons (link or quick reply); taps are counted in reports. ' +
     'variable_defaults gives a fallback per variable for contacts whose cell is empty. Submit it before use.',
   inputSchema: {
     name: z.string(),
     category: Category,
     body: z.string().max(1000),
     variable_defaults: z.record(z.string(), z.string()).optional(),
+    media: Media.optional(),
+    buttons: Buttons.optional(),
   },
 }, tool((a) => call('POST', '/v1/templates', a)));
 
@@ -118,13 +146,15 @@ server.registerTool('create_contact_list', {
 
 server.registerTool('send_message', {
   description:
-    'Send ONE real message now. Give body, or template_id with variables. sender_id defaults to the workspace default sender. ' +
+    'Send ONE real message now. Give body (optionally with media and buttons), or template_id with variables. sender_id defaults to the workspace default sender. ' +
     'Phone numbers in international format, e.g. +919812345678.',
   inputSchema: {
     to: z.string(),
     body: z.string().max(1000).optional(),
     template_id: z.string().uuid().optional(),
     variables: z.record(z.string(), z.string()).optional(),
+    media: Media.optional(),
+    buttons: Buttons.optional(),
     sender_id: z.string().optional(),
     category: Category.optional(),
   },

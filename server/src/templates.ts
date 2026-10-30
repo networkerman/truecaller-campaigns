@@ -26,7 +26,7 @@ export function cleanDefaults(body: string, defaults: Record<string, string> | u
   );
 }
 
-const COLUMNS = 'id, name, category, body, variables, variable_defaults, status, reject_reason, created_at, updated_at';
+const COLUMNS = 'id, name, category, body, variables, variable_defaults, media, buttons, status, reject_reason, created_at, updated_at';
 
 export async function listTemplates(ws: string) {
   return (await pool.query(`SELECT ${COLUMNS} FROM templates WHERE workspace_id = $1 ORDER BY updated_at DESC`, [ws])).rows;
@@ -36,13 +36,23 @@ export async function getTemplate(ws: string, id: string) {
   return (await pool.query(`SELECT ${COLUMNS} FROM templates WHERE id = $1 AND workspace_id = $2`, [id, ws])).rows[0] ?? null;
 }
 
-type TemplateFields = { name: string; category: string; body: string; variable_defaults?: Record<string, string> };
+type TemplateFields = {
+  name: string;
+  category: string;
+  body: string;
+  variable_defaults?: Record<string, string>;
+  media?: { url: string; mime_type: string; file_name?: string } | null;
+  buttons?: ({ type: 'link'; text: string; url: string } | { type: 'reply'; text: string })[];
+};
+
+// Variables used anywhere in the message: body, button labels and button URLs.
+const allText = (t: TemplateFields) => [t.body, ...(t.buttons ?? []).flatMap((b) => [b.text, 'url' in b ? b.url : ''])].join('\n');
 
 export async function createTemplate(ws: string, t: TemplateFields) {
   const { rows } = await pool.query(
-    `INSERT INTO templates (workspace_id, name, category, body, variables, variable_defaults)
-     VALUES ($5, $1, $2, $3, $4, $6) RETURNING ${COLUMNS}`,
-    [t.name, t.category, t.body, extractVariables(t.body), ws, cleanDefaults(t.body, t.variable_defaults)],
+    `INSERT INTO templates (workspace_id, name, category, body, variables, variable_defaults, media, buttons)
+     VALUES ($5, $1, $2, $3, $4, $6, $7, $8) RETURNING ${COLUMNS}`,
+    [t.name, t.category, t.body, extractVariables(allText(t)), ws, cleanDefaults(allText(t), t.variable_defaults), t.media ?? null, JSON.stringify(t.buttons ?? [])],
   );
   return rows[0];
 }
@@ -51,9 +61,9 @@ export async function createTemplate(ws: string, t: TemplateFields) {
 export async function updateTemplate(ws: string, id: string, t: TemplateFields) {
   const { rows } = await pool.query(
     `UPDATE templates SET name = $2, category = $3, body = $4, variables = $5, variable_defaults = $7,
-       status = 'draft', reject_reason = NULL, updated_at = now()
+       media = $8, buttons = $9, status = 'draft', reject_reason = NULL, updated_at = now()
      WHERE id = $1 AND workspace_id = $6 RETURNING ${COLUMNS}`,
-    [id, t.name, t.category, t.body, extractVariables(t.body), ws, cleanDefaults(t.body, t.variable_defaults)],
+    [id, t.name, t.category, t.body, extractVariables(allText(t)), ws, cleanDefaults(allText(t), t.variable_defaults), t.media ?? null, JSON.stringify(t.buttons ?? [])],
   );
   return rows[0] ?? null;
 }

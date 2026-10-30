@@ -1,8 +1,12 @@
 # Caddy gets and renews the HTTPS certificate for $DOMAIN by itself.
 {$DOMAIN} {
 	encode gzip
+	# Template attachments can be up to 20 MB.
+	request_body {
+		max_size 25MB
+	}
 
-	@api path /v1/* /webhooks/* /r/* /health
+	@api path /v1/* /webhooks/* /r/* /m/* /health
 	handle @api {
 		reverse_proxy api:3000
 	}

@@ -13,6 +13,7 @@ import { campaignRoutes } from './routes/campaigns.js';
 import { customerWebhookRoutes } from './routes/customerWebhooks.js';
 import { linkRoutes } from './routes/links.js';
 import { listRoutes } from './routes/lists.js';
+import { mediaRoutes } from './routes/media.js';
 import { messageRoutes } from './routes/messages.js';
 import { senderRoutes } from './routes/senders.js';
 import { teamRoutes } from './routes/team.js';
@@ -45,6 +46,7 @@ if (runMode !== 'worker') {
   await app.register(senderRoutes);
   await app.register(webhookRoutes, { provider });
   await app.register(linkRoutes);
+  await app.register(mediaRoutes);
   await app.listen({ port: config.port, host: '0.0.0.0' });
   await bootstrapSuperAdmins(app.log);
 }

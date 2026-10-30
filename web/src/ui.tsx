@@ -1,4 +1,5 @@
 import { useTestMode } from './testMode';
+import type { Button, Media } from './api';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 export const fmt = (n: number) => n.toLocaleString('en-IN');
@@ -95,4 +96,30 @@ export function useAsync() {
     }
   };
   return { busy, error, setError, run };
+}
+
+// Attachment and buttons under a message preview, drawn the way Truecaller shows them.
+export function RichParts({ media, buttons, fill = (t: string) => t }: { media: Media | null | undefined; buttons: Button[] | undefined; fill?: (t: string) => string }) {
+  return (
+    <>
+      {media && (
+        <div className="rich-media">
+          {media.mime_type.startsWith('image/') ? (
+            <img src={media.url} alt="" />
+          ) : media.mime_type.startsWith('video/') ? (
+            <div className="rich-file">▶ Video{media.file_name ? ` · ${media.file_name}` : ''}</div>
+          ) : (
+            <div className="rich-file">📄 {media.file_name || (media.mime_type === 'application/pdf' ? 'document.pdf' : 'file.txt')}</div>
+          )}
+        </div>
+      )}
+      {buttons && buttons.length > 0 && (
+        <div className="rich-buttons">
+          {buttons.map((b, i) => (
+            <span key={i} className={`rich-btn ${b.type}`}>{b.type === 'link' ? '↗ ' : '↩ '}{fill(b.text) || (b.type === 'link' ? 'Link button' : 'Quick reply')}</span>
+          ))}
+        </div>
+      )}
+    </>
+  );
 }

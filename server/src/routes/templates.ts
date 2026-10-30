@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireAuth, requirePermission } from '../auth.js';
+import { ButtonsSchema, MediaSchema } from '../rich.js';
 import {
   createTemplate,
   deleteTemplate,
@@ -17,6 +18,9 @@ const TemplateBody = z.object({
   body: z.string().trim().min(1).max(1000),
   // Fallback per variable, used when a contact's column is empty, e.g. { "name": "there" }.
   variable_defaults: z.record(z.string(), z.string().max(200)).optional(),
+  // Rich message parts: one image, video or file, and up to 3 link or quick-reply buttons.
+  media: MediaSchema.nullable().optional(),
+  buttons: ButtonsSchema.default([]),
 });
 const Id = z.object({ id: z.string().uuid() });
 

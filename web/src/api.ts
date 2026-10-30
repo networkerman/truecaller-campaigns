@@ -42,6 +42,15 @@ export const auth = {
 export type Category = 'promotional' | 'transactional' | 'service';
 export type TemplateStatus = 'draft' | 'submitted' | 'approved' | 'rejected';
 
+export type MediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'video/mp4' | 'video/quicktime' | 'application/pdf' | 'text/plain';
+export const MEDIA_TYPES: MediaType[] = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime', 'application/pdf', 'text/plain'];
+export interface Media {
+  url: string;
+  mime_type: MediaType;
+  file_name?: string;
+}
+export type Button = { type: 'link'; text: string; url: string } | { type: 'reply'; text: string };
+
 export interface Template {
   id: string;
   name: string;
@@ -50,13 +59,15 @@ export interface Template {
   variables: string[];
   // Used when a contact's column for that variable is empty.
   variable_defaults: Record<string, string>;
+  media: Media | null;
+  buttons: Button[];
   status: TemplateStatus;
   reject_reason: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export type TemplateInput = Pick<Template, 'name' | 'category' | 'body'> & { variable_defaults?: Record<string, string> };
+export type TemplateInput = Pick<Template, 'name' | 'category' | 'body'> & { variable_defaults?: Record<string, string>; media?: Media | null; buttons?: Button[] };
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await request(path, {
@@ -76,6 +87,13 @@ export const api = {
   updateTemplate: (id: string, t: TemplateInput) => call<Template>('PUT', `/v1/templates/${id}`, t),
   deleteTemplate: (id: string) => call<void>('DELETE', `/v1/templates/${id}`),
   submitTemplate: (id: string) => call<Template>('POST', `/v1/templates/${id}/submit`),
+  // Stores the file on our server and returns the public URL Truecaller downloads it from.
+  uploadMedia: async (file: File): Promise<Media & { size: number }> => {
+    const res = await request('/v1/media', { method: 'POST', headers: { 'content-type': file.type, 'x-file-name': encodeURIComponent(file.name) }, body: file });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error ?? `Upload failed (${res.status})`);
+    return data;
+  },
 };
 
 export interface ContactList {
@@ -118,6 +136,8 @@ export interface Campaign {
   template_id: string;
   template_name: string;
   template_body: string;
+  template_media: Media | null;
+  template_buttons: Button[];
   template_status: string;
   category: Category;
   list_id: string;
@@ -155,7 +175,7 @@ export interface Report {
     avg_read_s: number | null; median_read_s: number | null;
     avg_click_s: number | null; median_click_s: number | null;
   };
-  clicks: { tracked: boolean; unique: number; total: number };
+  clicks: { tracked: boolean; unique: number; total: number; by_button: { label: string; type: 'link' | 'reply' | 'text'; people: number; taps: number }[] };
   reasons: { status: 'failed' | 'blocked'; reason: string; count: number; category: string }[];
   categories: ReasonCategory[];
   timeline: { minute: string; processed: number }[];

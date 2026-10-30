@@ -107,6 +107,26 @@ export function ReportsPage({ id, onSelect }: { id: string | null; onSelect: (id
             </section>
           </div>
 
+          {report.clicks.by_button.length > 0 && (
+            <section className="card pad">
+              <h3>Buttons and links</h3>
+              <table className="table compact">
+                <thead><tr><th>Button</th><th>Type</th><th className="num">People</th><th className="num">Taps</th><th className="num">Of delivered</th></tr></thead>
+                <tbody>
+                  {report.clicks.by_button.map((b) => (
+                    <tr key={b.type + b.label} className="static">
+                      <td className="strong">{b.label}</td>
+                      <td className="muted">{b.type === 'reply' ? 'Quick reply' : b.type === 'link' ? 'Link button' : 'Text link'}</td>
+                      <td className="num">{fmt(b.people)}</td>
+                      <td className="num">{fmt(b.taps)}</td>
+                      <td className="num">{pctOf(b.people, report.campaign.delivered) || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+
           {report.timeline.length > 1 && (
             <section className="card pad">
               <h3>Sending over time</h3>

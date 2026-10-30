@@ -4,6 +4,7 @@ import { deliver, insertMessage, type NewMessage } from './messages.js';
 import type { MessagingProvider } from './providers/types.js';
 import { emitCampaignEvent } from './customerWebhooks.js';
 import { saveLinks, trackLinks } from './links.js';
+import { buildActions } from './rich.js';
 import { render } from './templates.js';
 
 // Truecaller counts days in Indian time.
@@ -20,7 +21,7 @@ const STATS = `
   count(m.id) FILTER (WHERE m.status = 'queued')::int AS queued`;
 
 const SELECT_CAMPAIGN = `
-  SELECT c.*, t.name AS template_name, t.category, t.body AS template_body, t.status AS template_status,
+  SELECT c.*, t.name AS template_name, t.category, t.body AS template_body, t.media AS template_media, t.buttons AS template_buttons, t.status AS template_status,
     l.name AS list_name, (SELECT count(*)::int FROM contacts WHERE list_id = c.list_id) AS recipients, ${STATS}
   FROM campaigns c
   JOIN templates t ON t.id = c.template_id
@@ -113,6 +114,15 @@ export async function campaignReport(ws: string, id: string) {
     `SELECT count(*)::int AS links, coalesce(sum(clicks), 0)::int AS total FROM links WHERE campaign_id = $1`,
     [id],
   );
+  // One row per button label (and one for links in the text): how many people tapped, and total taps.
+  const perButton = await pool.query(
+    `SELECT CASE WHEN kind = 'text' THEN 'Links in the message' ELSE label END AS label,
+       CASE WHEN kind = 'reply' THEN 'reply' WHEN kind = 'text' THEN 'text' ELSE 'link' END AS type,
+       count(DISTINCT message_id) FILTER (WHERE first_clicked_at IS NOT NULL)::int AS people,
+       coalesce(sum(clicks), 0)::int AS taps
+     FROM links WHERE campaign_id = $1 GROUP BY 1, 2 ORDER BY people DESC`,
+    [id],
+  );
   const tm = timing.rows[0];
   const secs = (v: unknown) => (v === null || v === undefined ? null : Math.round(Number(v) * 10) / 10);
   const clicked = tm.clicked as number;
@@ -142,7 +152,7 @@ export async function campaignReport(ws: string, id: string) {
       avg_read_s: secs(tm.avg_read), median_read_s: secs(tm.median_read),
       avg_click_s: secs(tm.avg_click), median_click_s: secs(tm.median_click),
     },
-    clicks: { tracked: hasLinks, unique: clicked, total: clicks.rows[0].total },
+    clicks: { tracked: hasLinks, unique: clicked, total: clicks.rows[0].total, by_button: perButton.rows },
     reasons: reasons.rows.map((r) => ({ ...r, category: categorize(r.reason) })),
     categories: groupReasons(reasons.rows),
     timeline: timeline.rows,
@@ -218,7 +228,7 @@ async function setNote(id: string, note: string | null) {
 
 async function sendBatch(provider: MessagingProvider, campaignId: string, batchSize: number) {
   const { rows: cr } = await pool.query(
-    `SELECT c.id, c.workspace_id, c.list_id, c.sender_id, c.template_id, t.body, t.category, c.track_links,
+    `SELECT c.id, c.workspace_id, c.list_id, c.sender_id, c.template_id, t.body, t.category, c.track_links, t.media, t.buttons,
        t.variable_defaults || c.variable_defaults AS defaults
      FROM campaigns c JOIN templates t ON t.id = c.template_id WHERE c.id = $1 AND c.status = 'running'`,
     [campaignId],
@@ -291,7 +301,9 @@ async function sendBatch(provider: MessagingProvider, campaignId: string, batchS
   const toSend: { id: string; msg: NewMessage }[] = [];
   for (const ct of batch) {
     const base = { workspaceId: c.workspace_id, to: ct.phone, senderId: c.sender_id, category: c.category, templateId: c.template_id, campaignId: c.id, contactId: ct.id };
-    const out = render(c.body, ct.attributes ?? {}, c.defaults ?? {});
+    const rendered = render(c.body, ct.attributes ?? {}, c.defaults ?? {});
+    const built = buildActions(c.buttons ?? [], ct.attributes ?? {}, c.defaults ?? {}, c.track_links);
+    const out = 'error' in rendered ? rendered : 'error' in built ? built : rendered;
 
     let blocked: string | null = null;
     if (ct.opted_out) blocked = 'Opted out';
@@ -306,10 +318,11 @@ async function sendBatch(provider: MessagingProvider, campaignId: string, batchS
       await insertMessage(provider, { ...base, body: c.body }, 'failed', out.error);
     } else {
       const tracked = c.track_links ? trackLinks(out.text) : { text: out.text, links: [] };
-      const msg = { ...base, body: tracked.text };
+      const actions = 'actions' in built ? built : { actions: [], rows: [] };
+      const msg = { ...base, body: tracked.text, media: c.media, actions: actions.actions };
       const id = await insertMessage(provider, msg);
       if (id) {
-        await saveLinks(id, c.id, tracked.links);
+        await saveLinks(id, c.id, [...tracked.links, ...actions.rows]);
         toSend.push({ id, msg });
         perSender.set(ct.phone, (perSender.get(ct.phone) ?? 0) + 1);
         perDay.set(ct.phone, (perDay.get(ct.phone) ?? 0) + 1);
