@@ -11,6 +11,7 @@ import { useTestMode } from './testMode';
 import { WebhooksPage } from './WebhooksPage';
 import { WorkspacesPage } from './WorkspacesPage';
 import { OnextelLogo } from './OnextelLogo';
+import { DOCS_URL } from './ui';
 
 // `need` hides a section from roles that can't use it; `superAdmin` sections are OneXtel-only.
 const NAV: { path: string; label: string; group: string; icon: string; need?: Permission; superAdmin?: boolean }[] = [
@@ -112,6 +113,11 @@ export function App() {
                   <NavIcon name={n.icon} />{n.label}
                 </a>
               ))}
+              {g === 'Developers' && (
+                <a href={`${DOCS_URL}/overview`} target="_blank" rel="noreferrer">
+                  <NavIcon name="book" />API docs <span className="ext">↗</span>
+                </a>
+              )}
             </div>
           ))}
         </nav>
@@ -158,6 +164,7 @@ const ICONS: Record<string, string> = {
   badge: 'M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3zM9 12l2 2 4-4',
   team: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1',
   grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  book: 'M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 5v16M8 7h7',
 };
 
 function NavIcon({ name }: { name: string }) {

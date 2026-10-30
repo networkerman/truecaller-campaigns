@@ -600,3 +600,13 @@ h1, h2, h3 { color: var(--ox-color-heading); }
 .template-card-body .clip { max-width: 100%; font-size: 15px; }
 .template-thumb .thumb-bubble > * { flex-shrink: 0; }
 .thumb-img { height: 84px; }
+
+/* API keys: links into the API reference. */
+.docs-links { display: flex; flex-direction: column; gap: 14px; margin-top: 16px; }
+.docs-links h3 { margin: 0 0 4px; }
+.doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.doc-tile { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--line); border-radius: var(--ox-radius-md); padding: 12px 14px; color: inherit; text-decoration: none; background: var(--ox-color-surface-raised); }
+.doc-tile:hover { border-color: var(--ox-navy-900); background: var(--ox-color-accent-subtle); }
+.doc-tile b { color: var(--ox-navy-900); font-family: var(--ox-font-family-heading); }
+.docs-links pre { margin: 0; }
+.sidebar nav a .ext { margin-left: auto; color: var(--muted); font-size: 12px; }
