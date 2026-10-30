@@ -200,10 +200,12 @@ const STEPS_INFO = [
   { n: '3', title: 'Watch it land', text: 'Delivered, read and clicked, with timings.' },
 ];
 
-// Left half of the sign-in screen, in the Aura (WARCS) look: soft red gradient, steps and a phone.
+// Left half of the sign-in screen, in the Onextel design system's Champagne theme
+// (gold gradient, dot pattern, brand swoosh), with steps and a phone.
 function Showcase() {
   return (
     <section className="showcase" aria-label="About Truecaller campaigns">
+      <img className="showcase-curve" src="/brand-curve.svg" alt="" />
       <div className="showcase-copy">
         <p className="eyebrow">OneXtel × Truecaller</p>
         <h2>Reach people where they check who's calling.</h2>
