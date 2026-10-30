@@ -12,6 +12,7 @@ import {
   tick,
 } from '../campaigns.js';
 import { config } from '../config.js';
+import { cleanDefaults } from '../templates.js';
 import { pool } from '../db.js';
 import { checkSender } from './senders.js';
 import type { MessagingProvider } from '../providers/types.js';
@@ -25,6 +26,10 @@ const CreateBody = z.object({
   // Optional: launch straight away (now, or at scheduled_at) instead of saving a draft.
   launch: z.boolean().default(false),
   scheduled_at: z.string().datetime({ offset: true }).optional(),
+  // Fallbacks for empty contact columns, on top of the template's own defaults.
+  variable_defaults: z.record(z.string(), z.string().max(200)).optional(),
+  // Rewrite links to count clicks. On by default.
+  track_links: z.boolean().optional(),
 });
 
 export async function campaignRoutes(app: FastifyInstance, opts: { provider: MessagingProvider; sender: boolean }) {
@@ -53,7 +58,11 @@ export async function campaignRoutes(app: FastifyInstance, opts: { provider: Mes
 
     const sender = await checkSender(req.ctx.workspaceId, b.sender_id);
     if ('error' in sender) return reply.code(400).send({ error: sender.error });
-    const c = await createCampaign(req.ctx.workspaceId, { name: b.name, templateId: b.template_id, listId: b.list_id, senderId: sender.senderId });
+    const tpl = await pool.query(`SELECT body FROM templates WHERE id = $1`, [b.template_id]);
+    const c = await createCampaign(req.ctx.workspaceId, {
+      name: b.name, templateId: b.template_id, listId: b.list_id, senderId: sender.senderId,
+      variableDefaults: cleanDefaults(tpl.rows[0].body, b.variable_defaults), trackLinks: b.track_links,
+    });
     if (!b.launch) return reply.code(201).send(c);
     const res = await launchCampaign(req.ctx.workspaceId, c.id, b.scheduled_at ? new Date(b.scheduled_at) : null);
     if ('error' in res) return reply.code(res.status!).send({ error: res.error, campaign: c });

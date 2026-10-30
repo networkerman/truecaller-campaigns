@@ -6,6 +6,8 @@ export interface SendRequest {
   senderId: string;
   body: string;
   campaignId?: string;
+  media?: import('../rich.js').Media | null;
+  actions?: import('../rich.js').Action[];
 }
 
 export interface SendResult {
@@ -25,4 +27,6 @@ export interface MessagingProvider {
   send(req: SendRequest): Promise<SendResult>;
   // Turns a raw webhook body into status updates. Returns [] for payloads we don't understand.
   parseWebhook(body: unknown): StatusUpdate[];
+  // Button taps and quick replies in a webhook body, by action tag.
+  parseTaps?(body: unknown): { tag: string; at: Date }[];
 }

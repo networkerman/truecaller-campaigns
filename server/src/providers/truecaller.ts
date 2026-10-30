@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import { config } from '../config.js';
+import { toContent } from '../rich.js';
 import type { MessageStatus, MessagingProvider, SendRequest, StatusUpdate } from './types.js';
 
 // Truecaller Business Chat API v2: gRPC service truecaller.messenger.business.v2.BusinessApi.
@@ -61,7 +62,7 @@ export function buildSendRequest(req: SendRequest) {
   return {
     deduplication_id: dedupId(req.messageId),
     recipient: { phone_number: req.to.replace(/\D/g, '') }, // int64, country code included, no '+'
-    content: { text: req.body },
+    content: toContent(req.body, req.media, req.actions),
     ttl_seconds: config.tc.ttlSeconds,
     campaign_id: req.campaignId ?? '',
   };
@@ -71,8 +72,13 @@ function send(req: SendRequest): Promise<Record<string, unknown>> {
   const key = apiKeyFor(req.senderId);
   if (!key) throw new Error(`No Truecaller API key for sender ${req.senderId}. Set TC_SENDER_KEYS or TC_API_KEY.`);
   const c = getClient();
+  // Required on every call (Getting started > Request metadata): the sender, as PhoneNumber
+  // (E.164 without '+') for phone number senders or SenderId for alphanumeric ones, and Version.
   const meta = new grpc.Metadata();
   meta.set('authorization', `Bearer ${key}`);
+  if (/^\+?\d+$/.test(req.senderId)) meta.set('phonenumber', req.senderId.replace(/\D/g, ''));
+  else meta.set('senderid', req.senderId);
+  meta.set('version', '12');
   return new Promise((resolve, reject) => {
     c.BusinessSendMessage(buildSendRequest(req), meta, { deadline: Date.now() + 15_000 }, (err, res) => {
       if (err) return reject(new Error(`Truecaller ${grpc.status[err.code] ?? err.code}: ${err.details || err.message}`));
@@ -92,6 +98,8 @@ const STATUS: Record<string, MessageStatus> = {
   REJECTED: 'failed',
 };
 
+const REPORT: Record<string, MessageStatus> = { RECEIVED: 'delivered', READ: 'read' };
+
 const pick = (o: Record<string, unknown>, keys: string[]) => keys.map((k) => o[k]).find((v) => typeof v === 'string' && v) as string | undefined;
 
 export function parseV2Webhook(body: unknown): StatusUpdate[] {
@@ -100,12 +108,38 @@ export function parseV2Webhook(body: unknown): StatusUpdate[] {
   for (const e of events) {
     if (!e || typeof e !== 'object') continue;
     const ev = e as Record<string, unknown>;
+    // v2 delivery and read receipts: { reportSent: { refMessageId, reportType: RECEIVED | READ, date } }.
+    // messageSent (user replies) and other events carry no status for our messages and are skipped.
+    const report = ev.reportSent as Record<string, unknown> | undefined;
+    if (report) {
+      const id = pick(report, ['refMessageId']);
+      const status = REPORT[String(report.reportType ?? '').toUpperCase()];
+      if (id && status) out.push({ providerMessageId: id, status, raw: e });
+      continue;
+    }
+    if (ev.messageSent || ev.messageActionPerformed || ev.modalFormCompleted) continue;
     const inner = (ev.message_status ?? ev.status_update ?? ev) as Record<string, unknown>;
     const id = pick(inner, ['message_id', 'messageId', 'id']) ?? pick(ev, ['message_id', 'messageId']);
     const raw = pick(inner, ['status', 'state', 'event']);
     const status = raw ? STATUS[raw.toUpperCase().replace(/^MESSAGE_STATUS_|^STATUS_/, '')] : undefined;
     if (!id || !status) continue;
     out.push({ providerMessageId: id, status, error: pick(inner, ['error', 'reason', 'error_message']), raw: e });
+  }
+  return out;
+}
+
+// messageActionPerformed (link button taps, actionTag) and messageSent (user replies; a tapped
+// quick reply carries content.action_tag). Dates are epoch seconds.
+export function parseV2Taps(body: unknown): { tag: string; at: Date }[] {
+  const events = Array.isArray((body as { events?: unknown })?.events) ? (body as { events: unknown[] }).events : [];
+  const out: { tag: string; at: Date }[] = [];
+  for (const e of events) {
+    const ev = (e ?? {}) as Record<string, Record<string, unknown> | undefined>;
+    const tap = ev.messageActionPerformed;
+    const reply = ev.messageSent;
+    const tag = tap ? tap.actionTag ?? tap.action_tag : (reply?.content as Record<string, unknown> | undefined)?.action_tag;
+    const date = Number((tap ?? reply)?.date);
+    if (typeof tag === 'string' && tag) out.push({ tag, at: Number.isFinite(date) && date > 0 ? new Date(date * 1000) : new Date() });
   }
   return out;
 }
@@ -120,5 +154,6 @@ export function createTruecallerProvider(): MessagingProvider {
       return { providerMessageId: id, status: 'sent' };
     },
     parseWebhook: parseV2Webhook,
+    parseTaps: parseV2Taps,
   };
 }

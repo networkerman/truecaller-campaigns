@@ -36,7 +36,7 @@ export function ReportsPage({ id, onSelect }: { id: string | null; onSelect: (id
       ) : !report ? (
         <div className="card"><p className="empty">Loading report…</p></div>
       ) : (
-        <>
+        <div className="report-body">
           <div className="report-head">
             <div>
               <h2>{report.campaign.name} <span className={`status cs-${report.campaign.status}`}>{report.campaign.status}</span></h2>
@@ -53,9 +53,23 @@ export function ReportsPage({ id, onSelect }: { id: string | null; onSelect: (id
           <div className="tiles">
             <Tile label="Delivery rate" value={`${report.rates.delivery_rate}%`} sub="of sent" />
             <Tile label="Read rate" value={`${report.rates.read_rate}%`} sub="of delivered" />
+            {report.rates.click_rate !== null && (
+              <Tile label="Click rate" value={`${report.rates.click_rate}%`} sub={`${fmt(report.clicks.unique)} people, ${fmt(report.clicks.total)} clicks`} />
+            )}
             <Tile label="Failed" value={fmt(report.campaign.failed)} sub={`${report.rates.failure_rate}% of processed`} bad={report.campaign.failed > 0} />
             <Tile label="Skipped" value={fmt(report.campaign.blocked)} sub="limits and opt-outs" />
           </div>
+
+          <section className="card pad">
+            <h3>Speed</h3>
+            <div className="tiles inner">
+              <Tile label="Avg time to deliver" value={dur(report.timing.avg_deliver_s)} sub={`median ${dur(report.timing.median_deliver_s)}`} />
+              <Tile label="Avg time to read" value={dur(report.timing.avg_read_s)} sub={`median ${dur(report.timing.median_read_s)}`} />
+              <Tile label="Avg time to click" value={report.clicks.tracked ? dur(report.timing.avg_click_s) : 'No links'}
+                sub={report.clicks.tracked ? `median ${dur(report.timing.median_click_s)}` : 'add a link to the template to track clicks'} />
+            </div>
+            <p className="hint">Measured from when Truecaller accepted each message. The median is less skewed by people who open it days later.</p>
+          </section>
 
           <div className="grid-2">
             <section className="card pad">
@@ -64,23 +78,54 @@ export function ReportsPage({ id, onSelect }: { id: string | null; onSelect: (id
             </section>
             <section className="card pad">
               <h3>Why contacts didn't get it</h3>
-              {report.reasons.length === 0 ? (
+              {report.categories.length === 0 ? (
                 <p className="muted">Nothing failed or skipped.</p>
               ) : (
-                <table className="table compact">
-                  <tbody>
-                    {report.reasons.map((r) => (
-                      <tr key={r.status + r.reason} className="static">
-                        <td><span className={`status ${r.status === 'failed' ? 'st-rejected' : 'st-submitted'}`}>{r.status === 'failed' ? 'failed' : 'skipped'}</span></td>
-                        <td>{r.reason}</td>
-                        <td className="num">{fmt(r.count)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="reasons">
+                  {report.categories.map((g) => (
+                    <details key={g.key} className="reason-group">
+                      <summary>
+                        <span className="strong">{g.label}</span>
+                        <span className="num">{fmt(g.count)} <small className="muted">{pctOf(g.count, report.campaign.processed)}</small></span>
+                      </summary>
+                      <p className="hint">{g.hint}</p>
+                      <table className="table compact">
+                        <tbody>
+                          {g.reasons.map((r) => (
+                            <tr key={r.status + r.reason} className="static">
+                              <td><span className={`status ${r.status === 'failed' ? 'st-rejected' : 'st-submitted'}`}>{r.status === 'failed' ? 'failed' : 'skipped'}</span></td>
+                              <td className="small">{r.reason}</td>
+                              <td className="num">{fmt(r.count)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </details>
+                  ))}
+                </div>
               )}
             </section>
           </div>
+
+          {report.clicks.by_button.length > 0 && (
+            <section className="card pad">
+              <h3>Buttons and links</h3>
+              <table className="table compact">
+                <thead><tr><th>Button</th><th>Type</th><th className="num">People</th><th className="num">Taps</th><th className="num">Of delivered</th></tr></thead>
+                <tbody>
+                  {report.clicks.by_button.map((b) => (
+                    <tr key={b.type + b.label} className="static">
+                      <td className="strong">{b.label}</td>
+                      <td className="muted">{b.type === 'reply' ? 'Quick reply' : b.type === 'link' ? 'Link button' : 'Text link'}</td>
+                      <td className="num">{fmt(b.people)}</td>
+                      <td className="num">{fmt(b.taps)}</td>
+                      <td className="num">{pctOf(b.people, report.campaign.delivered) || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
 
           {report.timeline.length > 1 && (
             <section className="card pad">
@@ -96,11 +141,22 @@ export function ReportsPage({ id, onSelect }: { id: string | null; onSelect: (id
               <p className="hint">Contacts processed per minute</p>
             </section>
           )}
-        </>
+        </div>
       )}
     </>
   );
 }
+
+// 42 → "42s", 300 → "5m", 5400 → "1h 30m".
+function dur(s: number | null) {
+  if (s === null) return '—';
+  if (s < 60) return `${Math.round(s)}s`;
+  if (s < 3600) return `${Math.round(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m`;
+  return `${Math.round((s / 86400) * 10) / 10}d`;
+}
+
+const pctOf = (a: number, b: number) => (b ? `${Math.round((a / b) * 1000) / 10}%` : '');
 
 function Tile({ label, value, sub, bad }: { label: string; value: string; sub: string; bad?: boolean }) {
   return (

@@ -90,6 +90,18 @@ All `/v1` calls need an `x-api-key` header (the dashboard uses its sign-in cooki
 
 Statuses move forward only: `queued → sent → delivered → read`, or end in `failed` / `blocked`.
 
+## MCP server (run campaigns from Claude Code)
+
+`mcp/` is a stdio MCP server over the API above: senders, templates, contact lists, single sends, campaigns and reports.
+
+```bash
+cd mcp && npm install
+./login.sh                     # paste a workspace API key (API keys page); stored in the macOS Keychain
+claude mcp add --scope user truecaller-campaigns -- node "$PWD/index.mjs"
+```
+
+The key decides the workspace and is never a tool argument. `TC_CAMPAIGNS_API_KEY` overrides the Keychain, `TC_CAMPAIGNS_URL` the deployment (default `https://truecaller.udchowdhury.me`). `./login.sh logout` removes the key; revoke it on the API keys page to cut access everywhere.
+
 ## Webhooks
 
 Add endpoints on the dashboard's Webhooks page. Events: `message.sent`, `message.delivered`, `message.read`, `message.failed`, `campaign.started`, `campaign.completed`. Each POST has `x-onextel-event`, `x-onextel-delivery` and `x-onextel-signature: t=TIMESTAMP,v1=HMAC_SHA256(secret, "TIMESTAMP.BODY")`. Anything but a 2xx within 10 seconds is retried after 1 min, 5 min, 30 min, 2 h and 6 h, then marked failed. Failed deliveries can be retried from the log.

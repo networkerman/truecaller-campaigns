@@ -10,18 +10,20 @@ import { TemplatesPage } from './TemplatesPage';
 import { useTestMode } from './testMode';
 import { WebhooksPage } from './WebhooksPage';
 import { WorkspacesPage } from './WorkspacesPage';
+import { OnextelLogo } from './OnextelLogo';
+import { DOCS_URL } from './ui';
 
 // `need` hides a section from roles that can't use it; `superAdmin` sections are OneXtel-only.
-const NAV: { path: string; label: string; group: string; need?: Permission; superAdmin?: boolean }[] = [
-  { path: 'campaigns', label: 'Campaigns', group: 'Messaging' },
-  { path: 'templates', label: 'Templates', group: 'Messaging' },
-  { path: 'lists', label: 'Contact lists', group: 'Messaging' },
-  { path: 'reports', label: 'Reports', group: 'Messaging' },
-  { path: 'api-keys', label: 'API keys', group: 'Developers', need: 'keys:manage' },
-  { path: 'webhooks', label: 'Webhooks', group: 'Developers', need: 'keys:manage' },
-  { path: 'senders', label: 'Senders', group: 'Settings', need: 'reports:view' },
-  { path: 'team', label: 'Team', group: 'Settings' },
-  { path: 'workspaces', label: 'All workspaces', group: 'OneXtel', superAdmin: true },
+const NAV: { path: string; label: string; group: string; icon: string; need?: Permission; superAdmin?: boolean }[] = [
+  { path: 'campaigns', icon: 'megaphone', label: 'Campaigns', group: 'Messaging' },
+  { path: 'templates', icon: 'template', label: 'Templates', group: 'Messaging' },
+  { path: 'lists', icon: 'users', label: 'Contact lists', group: 'Messaging' },
+  { path: 'reports', icon: 'chart', label: 'Reports', group: 'Messaging' },
+  { path: 'api-keys', icon: 'key', label: 'API keys', group: 'Developers', need: 'keys:manage' },
+  { path: 'webhooks', icon: 'webhook', label: 'Webhooks', group: 'Developers', need: 'keys:manage' },
+  { path: 'senders', icon: 'badge', label: 'Senders', group: 'Settings', need: 'reports:view' },
+  { path: 'team', icon: 'team', label: 'Team', group: 'Settings' },
+  { path: 'workspaces', icon: 'grid', label: 'All workspaces', group: 'OneXtel', superAdmin: true },
 ];
 
 const parse = () => {
@@ -81,32 +83,52 @@ export function App() {
   const links = nav.map(link);
   const groups = [...new Set(nav.map((n) => n.group))];
 
+  const initials = (t: string) => t.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
   return (
     <div className="shell">
       <aside className="sidebar">
-        <Brand />
-        <div className="ws">
-          {user.workspaces.length > 1 ? (
-            <select className="ws-select" value={ws.id} onChange={(e) => switchTo(e.target.value)} aria-label="Workspace">
-              {user.workspaces.map((w) => (
-                <option key={w.id} value={w.id}>{w.name}{w.role ? '' : ' (support)'}</option>
-              ))}
-            </select>
-          ) : (
-            <div className="ws-name">{ws.name}</div>
-          )}
-          <div className="ws-role">{ws.support ? 'Support access' : roleLabel(ws.role)}</div>
+        <div className="side-logo"><OnextelLogo /><span>Truecaller campaigns</span></div>
+        <div className="ws-card">
+          <span className="ws-avatar">{initials(ws.name)}</span>
+          <div className="ws-text">
+            {user.workspaces.length > 1 ? (
+              <select className="ws-select" value={ws.id} onChange={(e) => switchTo(e.target.value)} aria-label="Workspace">
+                {user.workspaces.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name}{w.role ? '' : ' (support)'}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="ws-name">{ws.name}</div>
+            )}
+            <div className="ws-role">{ws.support ? 'Support access' : roleLabel(ws.role)}</div>
+          </div>
+          {user.workspaces.length > 1 && <span className="ws-chevron" aria-hidden="true">⌄</span>}
         </div>
         <nav>
           {groups.map((g) => (
             <div key={g} className="nav-group">
               {g !== 'Messaging' && <div className="nav-label">{g}</div>}
-              {nav.filter((n) => n.group === g).map(link)}
+              {nav.filter((n) => n.group === g).map((n) => (
+                <a key={n.path} href={`#/${n.path}`} className={page === n.path ? 'active' : ''}>
+                  <NavIcon name={n.icon} />{n.label}
+                </a>
+              ))}
+              {g === 'Developers' && (
+                <a href={`${DOCS_URL}/overview`} target="_blank" rel="noreferrer">
+                  <NavIcon name="book" />API docs <span className="ext">↗</span>
+                </a>
+              )}
             </div>
           ))}
         </nav>
-        <div className="whoami" title={user.email}>{user.name}{user.super_admin && <small className="sa">Super admin</small>}</div>
-        <button className="signout" onClick={signOut}>Sign out</button>
+        <div className="side-user">
+          <span className="user-avatar">{initials(user.name)}</span>
+          <div className="user-text" title={user.email}>
+            <b>{user.name}</b>
+            <span>{user.super_admin ? 'Super admin' : roleLabel(ws.role ?? 'member')}</span>
+          </div>
+          <button className="signout" onClick={signOut} title="Sign out" aria-label="Sign out">⎋</button>
+        </div>
       </aside>
       <nav className="topnav" aria-label="Sections">{links}</nav>
       <main className="content" key={ws.id}>
@@ -131,11 +153,33 @@ export function App() {
   );
 }
 
+// 24px line icons, 1.5 stroke, like the design system's set.
+const ICONS: Record<string, string> = {
+  megaphone: 'M3 11v2a1 1 0 0 0 1 1h2l5 4V6L6 10H4a1 1 0 0 0-1 1zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13',
+  template: 'M4 4h16v16H4zM4 9h16M9 9v11',
+  users: 'M16 19v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1M9 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M22 19v-1a4 4 0 0 0-3-3.9M16 4.1a3 3 0 0 1 0 5.8',
+  chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  key: 'M15 7a4 4 0 1 1-3.4 6.1L4 20.7V17h3v-3h3l1.1-1.1A4 4 0 0 1 15 7zM16 8h.01',
+  webhook: 'M10 14a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-.5.5M14 10a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l.5-.5',
+  badge: 'M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3zM9 12l2 2 4-4',
+  team: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1',
+  grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+  book: 'M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 5v16M8 7h7',
+};
+
+function NavIcon({ name }: { name: string }) {
+  return (
+    <svg className="nav-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={ICONS[name] ?? ICONS.grid} />
+    </svg>
+  );
+}
+
 function Brand({ dark }: { dark?: boolean }) {
   return (
     <div className={dark ? 'brand dark' : 'brand'}>
-      <XMark />
-      <span className="brand-name">OneXtel<small>Truecaller campaigns</small></span>
+      <OnextelLogo />
+      <small>Truecaller campaigns</small>
     </div>
   );
 }
@@ -173,6 +217,7 @@ function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
 
   return (
     <div className="signin">
+      <Showcase />
       <form className="card signin-card" onSubmit={submit}>
         <Brand dark />
         <h1>Sign in</h1>
@@ -189,6 +234,64 @@ function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
         <button className="btn primary wide" disabled={busy || !email.trim() || !password}>{busy ? 'One moment…' : 'Sign in'}</button>
         <p className="muted switch small">No account? Access is by invitation from your workspace Owner or OneXtel.</p>
       </form>
+    </div>
+  );
+}
+
+const STEPS_INFO = [
+  { n: '1', title: 'Upload your list', text: 'Excel or CSV. Each column fills a {{variable}}.' },
+  { n: '2', title: 'Send from a verified sender', text: 'Your name and badge, right in Truecaller.' },
+  { n: '3', title: 'Watch it land', text: 'Delivered, read and clicked, with timings.' },
+];
+
+// Left half of the sign-in screen, in the Onextel design system's Champagne theme
+// (gold gradient, dot pattern, brand swoosh), with steps and a phone.
+function Showcase() {
+  return (
+    <section className="showcase" aria-label="About Truecaller campaigns">
+      <img className="showcase-curve" src="/brand-curve.svg" alt="" />
+      <div className="showcase-copy">
+        <p className="eyebrow">OneXtel × Truecaller</p>
+        <h2>Reach people where they check who's calling.</h2>
+        <p className="lede">Business messages that arrive in Truecaller with your verified name, sent and tracked from your OneXtel workspace.</p>
+        <ol className="how">
+          {STEPS_INFO.map((s) => (
+            <li key={s.n}><span className="how-n">{s.n}</span><div><b>{s.title}</b><span>{s.text}</span></div></li>
+          ))}
+        </ol>
+      </div>
+      <TruecallerPhone />
+    </section>
+  );
+}
+
+// A drawn phone showing a business chat as Truecaller presents it. Swap for a real screenshot when there is one.
+function TruecallerPhone() {
+  return (
+    <div className="phone-frame" aria-hidden="true">
+      <div className="phone-notch" />
+      <div className="tc-status"><span>9:41</span><span>●●● ▮</span></div>
+      <div className="tc-bar">
+        <span className="tc-back">‹</span>
+        <span className="tc-avatar">OX</span>
+        <div className="tc-who">
+          <b>OneXtel <svg viewBox="0 0 24 24" width="14" height="14"><circle cx="12" cy="12" r="11" fill="#0087ff" /><path d="M7 12.5l3 3 7-7" stroke="#fff" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></b>
+          <span>Verified business</span>
+        </div>
+      </div>
+      <div className="tc-chat">
+        <div className="tc-day">Today</div>
+        <div className="tc-msg">
+          Hi Asha, a quick safety reminder: never open links or share OTPs, PINs or card details from unexpected messages or calls.
+          <span className="tc-time">10:42</span>
+        </div>
+        <div className="tc-msg">
+          Your order <b>OX1002</b> has shipped and arrives by Saturday.
+          <span className="tc-link">Track order</span>
+          <span className="tc-time">10:44 ✓✓</span>
+        </div>
+      </div>
+      <div className="tc-foot">Business chat on Truecaller</div>
     </div>
   );
 }
@@ -217,6 +320,7 @@ function ChangePassword({ user, onDone }: { user: User; onDone: () => void }) {
 
   return (
     <div className="signin">
+      <Showcase />
       <form className="card signin-card" onSubmit={submit}>
         <Brand dark />
         <h1>Choose your password</h1>
