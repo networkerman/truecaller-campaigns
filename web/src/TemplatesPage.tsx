@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, MEDIA_TYPES, type Button, type Category, type Media, type MediaType, type Template, type TemplateInput } from './api';
-import { PageHead, TcPreview } from './ui';
+import { PageHead, TcPreview, TcText } from './ui';
 
 const PLACEHOLDER = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
 const MAX_LEN = 1000;
@@ -94,17 +94,12 @@ export function TemplatesPage() {
               <button key={t.id} className="template-card" onClick={() => setEditing({ mode: 'edit', template: t })}>
                 <TemplateThumb t={t} />
                 <div className="template-card-body">
+                  <span className="strong clip" title={t.name}>{t.name}</span>
                   <div className="row-between">
-                    <span className="strong clip">{t.name}</span>
+                    <span className={`chip cat-${t.category}`}>{t.category}</span>
                     <span className={`status st-${t.status}`}>{t.status}</span>
                   </div>
-                  <div className="template-card-meta">
-                    <span className={`chip cat-${t.category}`}>{t.category}</span>
-                    <span className="chip">{typeOf(t)}</span>
-                  </div>
-                  <div className="muted small">
-                    {t.variables.length ? `Variables: ${t.variables.join(', ')}` : 'No variables'} · {new Date(t.updated_at).toLocaleDateString()}
-                  </div>
+                  <span className="muted small">Updated {new Date(t.updated_at).toLocaleDateString()}</span>
                 </div>
               </button>
             ))}
@@ -329,16 +324,13 @@ function Editor({
 function TemplateThumb({ t }: { t: Template }) {
   const image = t.media?.mime_type.startsWith('image/') ? t.media.url : null;
   return (
-    <div className={`template-thumb${image ? ' has-image' : ''}`}>
-      {image ? (
-        <img src={image} alt="" loading="lazy" />
-      ) : (
-        <div className="thumb-bubble">
-          {t.media && <div className="rich-file small">{t.media.mime_type.startsWith('video/') ? '▶ Video' : `📄 ${t.media.file_name || 'File'}`}</div>}
-          <div className="thumb-text">{t.body}</div>
-          {t.buttons?.length > 0 && <div className="thumb-buttons">{t.buttons.map((b, i) => <span key={i}>{b.text}</span>)}</div>}
-        </div>
-      )}
+    <div className="template-thumb">
+      <div className="thumb-bubble">
+        {image && <img className="thumb-img" src={image} alt="" loading="lazy" />}
+        {t.media && !image && <div className="tc-file small"><span className="tc-file-icon">{t.media.mime_type.startsWith('video/') ? '▶' : '📄'}</span><span className="tc-file-text"><b>{t.media.file_name || (t.media.mime_type.startsWith('video/') ? 'Video' : 'File')}</b></span></div>}
+        <div className="thumb-text"><TcText text={t.body} /></div>
+        {t.buttons?.length > 0 && <div className="thumb-buttons">{t.buttons.map((b, i) => <span key={i}>{b.text}</span>)}</div>}
+      </div>
     </div>
   );
 }
