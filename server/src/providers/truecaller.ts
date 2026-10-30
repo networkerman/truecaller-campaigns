@@ -71,8 +71,13 @@ function send(req: SendRequest): Promise<Record<string, unknown>> {
   const key = apiKeyFor(req.senderId);
   if (!key) throw new Error(`No Truecaller API key for sender ${req.senderId}. Set TC_SENDER_KEYS or TC_API_KEY.`);
   const c = getClient();
+  // Required on every call (Getting started > Request metadata): the sender, as PhoneNumber
+  // (E.164 without '+') for phone number senders or SenderId for alphanumeric ones, and Version.
   const meta = new grpc.Metadata();
   meta.set('authorization', `Bearer ${key}`);
+  if (/^\+?\d+$/.test(req.senderId)) meta.set('phonenumber', req.senderId.replace(/\D/g, ''));
+  else meta.set('senderid', req.senderId);
+  meta.set('version', '12');
   return new Promise((resolve, reject) => {
     c.BusinessSendMessage(buildSendRequest(req), meta, { deadline: Date.now() + 15_000 }, (err, res) => {
       if (err) return reject(new Error(`Truecaller ${grpc.status[err.code] ?? err.code}: ${err.details || err.message}`));
@@ -92,6 +97,8 @@ const STATUS: Record<string, MessageStatus> = {
   REJECTED: 'failed',
 };
 
+const REPORT: Record<string, MessageStatus> = { RECEIVED: 'delivered', READ: 'read' };
+
 const pick = (o: Record<string, unknown>, keys: string[]) => keys.map((k) => o[k]).find((v) => typeof v === 'string' && v) as string | undefined;
 
 export function parseV2Webhook(body: unknown): StatusUpdate[] {
@@ -100,6 +107,16 @@ export function parseV2Webhook(body: unknown): StatusUpdate[] {
   for (const e of events) {
     if (!e || typeof e !== 'object') continue;
     const ev = e as Record<string, unknown>;
+    // v2 delivery and read receipts: { reportSent: { refMessageId, reportType: RECEIVED | READ, date } }.
+    // messageSent (user replies) and other events carry no status for our messages and are skipped.
+    const report = ev.reportSent as Record<string, unknown> | undefined;
+    if (report) {
+      const id = pick(report, ['refMessageId']);
+      const status = REPORT[String(report.reportType ?? '').toUpperCase()];
+      if (id && status) out.push({ providerMessageId: id, status, raw: e });
+      continue;
+    }
+    if (ev.messageSent || ev.messageActionPerformed || ev.modalFormCompleted) continue;
     const inner = (ev.message_status ?? ev.status_update ?? ev) as Record<string, unknown>;
     const id = pick(inner, ['message_id', 'messageId', 'id']) ?? pick(ev, ['message_id', 'messageId']);
     const raw = pick(inner, ['status', 'state', 'event']);
