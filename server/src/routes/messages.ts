@@ -9,6 +9,7 @@ import { ButtonsSchema, MediaSchema, buildActions, type ActionRow, type Media } 
 import type { MessagingProvider } from '../providers/types.js';
 import { checkSender } from './senders.js';
 import { getTemplate, render } from '../templates.js';
+import { getSettings } from '../settings.js';
 
 // Either a free-text body, or an approved template plus its variable values.
 const SendBody = z
@@ -16,7 +17,7 @@ const SendBody = z
     to: z.string(),
     sender_id: z.string().optional(),
     body: z.string().min(1).max(1000).optional(),
-    category: z.enum(['promotional', 'transactional', 'service']).default('transactional'),
+    category: z.enum(['promotional', 'transactional', 'service']).optional(),
     template_id: z.string().uuid().optional(),
     variables: z.record(z.string(), z.string()).default({}),
     // With a free-text body: optional attachment and buttons. A template brings its own.
@@ -38,7 +39,8 @@ export async function messageRoutes(app: FastifyInstance, opts: { provider: Mess
     if (!phone?.isValid()) return reply.code(400).send({ error: 'invalid phone number' });
 
     let body = data.body ?? '';
-    let category: string = data.category;
+    const settings = await getSettings(req.ctx.workspaceId);
+    let category: string = data.category ?? settings.defaults.category;
     let media: Media | null = data.media ?? null;
     let buttons = data.buttons;
     let defaults: Record<string, string> = {};
@@ -70,6 +72,7 @@ export async function messageRoutes(app: FastifyInstance, opts: { provider: Mess
       templateId: data.template_id,
       media,
       actions: built.actions,
+      ttlSeconds: settings.defaults.ttl_hours * 3600,
     }, (id) => saveLinks(id, null, rows));
     return reply.code(202).send(msg);
   });

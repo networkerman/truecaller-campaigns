@@ -1,8 +1,11 @@
 import { emitMessageEvent } from './customerWebhooks.js';
 import { pool } from './db.js';
+import { fallsBack, queueFallback } from './fallback.js';
+import { config } from './config.js';
 import type { MessagingProvider, MessageStatus, StatusUpdate } from './providers/types.js';
 
-const rank: Record<MessageStatus, number> = { queued: 0, sent: 1, delivered: 2, read: 3, failed: 4, blocked: 4 };
+// A late delivered receipt still beats expired; failed and blocked are final.
+const rank: Record<MessageStatus, number> = { queued: 0, sent: 1, expired: 1.5, delivered: 2, read: 3, failed: 4, blocked: 4 };
 
 export interface NewMessage {
   workspaceId: string;
@@ -13,6 +16,7 @@ export interface NewMessage {
   templateId?: string;
   campaignId?: string;
   contactId?: string;
+  ttlSeconds?: number;
   media?: import('./rich.js').Media | null;
   actions?: import('./rich.js').Action[];
 }
@@ -42,10 +46,11 @@ export async function insertMessage(
 // Hands a queued message to the provider and records the outcome.
 export async function deliver(provider: MessagingProvider, id: string, msg: NewMessage) {
   try {
-    const res = await provider.send({ messageId: id, to: msg.to, senderId: msg.senderId, body: msg.body, campaignId: msg.campaignId, media: msg.media, actions: msg.actions });
+    const ttl = msg.ttlSeconds ?? config.tc.ttlSeconds;
+    const res = await provider.send({ messageId: id, to: msg.to, senderId: msg.senderId, body: msg.body, campaignId: msg.campaignId, ttlSeconds: ttl, media: msg.media, actions: msg.actions });
     await pool.query(
-      `UPDATE messages SET provider_message_id = $2, status = $3, updated_at = now() WHERE id = $1`,
-      [id, res.providerMessageId, res.status],
+      `UPDATE messages SET provider_message_id = $2, status = $3, expires_at = now() + make_interval(secs => $4), updated_at = now() WHERE id = $1`,
+      [id, res.providerMessageId, res.status, ttl],
     );
     await logEvent(id, res.status, null);
     await emitMessageEvent(id, res.status);
@@ -54,6 +59,7 @@ export async function deliver(provider: MessagingProvider, id: string, msg: NewM
     await pool.query(`UPDATE messages SET status = 'failed', error = $2, updated_at = now() WHERE id = $1`, [id, error]);
     await logEvent(id, 'failed', { error });
     await emitMessageEvent(id, 'failed', error);
+    if (msg.campaignId && fallsBack(error)) await queueFallback(id);
   }
 }
 
@@ -74,6 +80,7 @@ export async function applyStatusUpdate(u: StatusUpdate) {
   if (rank[u.status] > rank[status]) {
     await pool.query(`UPDATE messages SET status = $2, error = $3, updated_at = now() WHERE id = $1`, [id, u.status, u.error ?? null]);
     await emitMessageEvent(id, u.status, u.error);
+    if (u.status === 'failed') await queueFallback(id);
   }
   return true;
 }

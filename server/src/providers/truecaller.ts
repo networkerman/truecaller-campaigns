@@ -63,7 +63,7 @@ export function buildSendRequest(req: SendRequest) {
     deduplication_id: dedupId(req.messageId),
     recipient: { phone_number: req.to.replace(/\D/g, '') }, // int64, country code included, no '+'
     content: toContent(req.body, req.media, req.actions),
-    ttl_seconds: config.tc.ttlSeconds,
+    ttl_seconds: req.ttlSeconds ?? config.tc.ttlSeconds,
     campaign_id: req.campaignId ?? '',
   };
 }

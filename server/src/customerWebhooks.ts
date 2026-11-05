@@ -3,16 +3,11 @@ import { config } from './config.js';
 import { pool } from './db.js';
 import { postJson } from './sources.js';
 
-// Events a customer can subscribe to. Message events follow the message's status; campaign
-// events fire when a campaign starts sending and when it finishes.
-export const EVENTS = [
-  'message.sent',
-  'message.delivered',
-  'message.read',
-  'message.failed',
-  'campaign.started',
-  'campaign.completed',
-] as const;
+// Event types a customer subscribes to:
+// delivery: message status changes (sent, delivered, read, failed, expired), link-button taps and fallback outcomes;
+// incoming: replies from the person, including quick-reply taps;
+// url_click: clicks on tracked links in the message or on link buttons.
+export const EVENTS = ['delivery', 'incoming', 'url_click'] as const;
 export type WebhookEvent = (typeof EVENTS)[number];
 
 export const MAX_ENDPOINTS = 5;
@@ -27,27 +22,26 @@ export function sign(secret: string, timestamp: number, body: string) {
   return createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
 }
 
-// Queues an event for every enabled endpoint in the workspace that subscribed to it.
-export async function emit(workspaceId: string, event: WebhookEvent, data: Record<string, unknown>) {
-  const payload = { id: `evt_${randomUUID()}`, type: event, created_at: new Date().toISOString(), data };
+// Queues an event for every enabled endpoint in the workspace subscribed to its event type.
+// `type` is the specific event, e.g. message.delivered, and is what the payload and header carry.
+export async function emit(workspaceId: string, event: WebhookEvent, type: string, data: Record<string, unknown>) {
+  const payload = { id: `evt_${randomUUID()}`, type, event_type: event, created_at: new Date().toISOString(), data };
   await pool.query(
     `INSERT INTO webhook_deliveries (endpoint_id, event, payload)
-     SELECT id, $2, $3 FROM webhook_endpoints WHERE workspace_id = $1 AND enabled AND $2 = ANY(events)`,
-    [workspaceId, event, JSON.stringify(payload)],
+     SELECT id, $3, $4 FROM webhook_endpoints WHERE workspace_id = $1 AND enabled AND $2 = ANY(events)`,
+    [workspaceId, event, type, JSON.stringify(payload)],
   );
 }
 
 // Message events carry what a customer needs to match them to their own send.
-export async function emitMessageEvent(messageId: string, status: string, error?: string | null) {
-  const event = `message.${status}` as WebhookEvent;
-  if (!EVENTS.includes(event)) return;
+export async function emitMessageEvent(messageId: string, status: string, error?: string | null, extra: Record<string, unknown> = {}) {
   const { rows } = await pool.query(
     `SELECT workspace_id, id, to_number, sender_id, campaign_id, template_id FROM messages WHERE id = $1`,
     [messageId],
   );
   const m = rows[0];
   if (!m) return;
-  await emit(m.workspace_id, event, {
+  await emit(m.workspace_id, 'delivery', `message.${status}`, {
     message_id: m.id,
     to: m.to_number,
     sender_id: m.sender_id,
@@ -55,25 +49,7 @@ export async function emitMessageEvent(messageId: string, status: string, error?
     template_id: m.template_id,
     status,
     ...(error ? { error } : {}),
-  });
-}
-
-export async function emitCampaignEvent(campaignId: string, event: 'campaign.started' | 'campaign.completed') {
-  const { rows } = await pool.query(
-    `SELECT c.workspace_id, c.id, c.name, c.status, c.started_at, c.completed_at,
-       (SELECT count(*)::int FROM messages WHERE campaign_id = c.id) AS processed
-     FROM campaigns c WHERE c.id = $1`,
-    [campaignId],
-  );
-  const c = rows[0];
-  if (!c) return;
-  await emit(c.workspace_id, event, {
-    campaign_id: c.id,
-    name: c.name,
-    status: c.status,
-    started_at: c.started_at,
-    completed_at: c.completed_at,
-    processed: c.processed,
+    ...extra,
   });
 }
 

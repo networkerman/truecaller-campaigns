@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { config } from '../config.js';
 import { recordTap } from '../links.js';
+import { handleUserEvents } from '../incoming.js';
 import { applyStatusUpdate } from '../messages.js';
 import type { MessagingProvider } from '../providers/types.js';
 
@@ -55,6 +56,7 @@ export async function webhookRoutes(app: FastifyInstance, opts: { provider: Mess
     const updates = opts.provider.parseWebhook(body);
     for (const u of updates) await applyStatusUpdate(u);
     for (const t of opts.provider.parseTaps?.(body) ?? []) await recordTap(t.tag, t.at);
+    await handleUserEvents(body);
     return { received: updates.length };
   });
 }

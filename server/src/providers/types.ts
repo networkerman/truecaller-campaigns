@@ -1,4 +1,4 @@
-export type MessageStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | 'blocked';
+export type MessageStatus = 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | 'blocked' | 'expired';
 
 export interface SendRequest {
   messageId: string;
@@ -6,6 +6,7 @@ export interface SendRequest {
   senderId: string;
   body: string;
   campaignId?: string;
+  ttlSeconds?: number;
   media?: import('../rich.js').Media | null;
   actions?: import('../rich.js').Action[];
 }

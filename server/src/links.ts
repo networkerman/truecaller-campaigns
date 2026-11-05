@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { config } from './config.js';
+import { emit } from './customerWebhooks.js';
 import { pool } from './db.js';
 
 // Plain URLs and markdown link targets alike; stops at whitespace and closing brackets.
@@ -53,8 +54,17 @@ export async function recordTap(tag: string, at: Date) {
 export async function recordClick(c: string) {
   const { rows } = await pool.query(
     `UPDATE links SET clicks = clicks + 1, first_clicked_at = coalesce(first_clicked_at, now()), last_clicked_at = now()
-     WHERE code = $1 AND kind <> 'reply' RETURNING url`,
+     WHERE code = $1 AND kind <> 'reply' RETURNING url, label, kind, message_id, campaign_id`,
     [c],
   );
-  return (rows[0]?.url as string | undefined) ?? null;
+  const l = rows[0];
+  if (!l) return null;
+  const m = await pool.query(`SELECT workspace_id, to_number FROM messages WHERE id = $1`, [l.message_id]);
+  if (m.rows[0]) {
+    await emit(m.rows[0].workspace_id, 'url_click', 'link.clicked', {
+      message_id: l.message_id, campaign_id: l.campaign_id, to: m.rows[0].to_number, url: l.url,
+      button: l.kind === 'text' ? null : l.label, clicked_at: new Date().toISOString(),
+    });
+  }
+  return l.url as string;
 }

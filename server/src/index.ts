@@ -16,6 +16,7 @@ import { listRoutes } from './routes/lists.js';
 import { mediaRoutes } from './routes/media.js';
 import { messageRoutes } from './routes/messages.js';
 import { senderRoutes } from './routes/senders.js';
+import { settingsRoutes } from './routes/settings.js';
 import { teamRoutes } from './routes/team.js';
 import { templateRoutes } from './routes/templates.js';
 import { webhookRoutes } from './routes/webhooks.js';
@@ -47,6 +48,7 @@ if (runMode !== 'worker') {
   await app.register(webhookRoutes, { provider });
   await app.register(linkRoutes);
   await app.register(mediaRoutes);
+  await app.register(settingsRoutes);
   await app.listen({ port: config.port, host: '0.0.0.0' });
   await bootstrapSuperAdmins(app.log);
 }

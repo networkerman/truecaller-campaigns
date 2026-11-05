@@ -4,6 +4,7 @@ import { audit, requireAuth, requirePermission } from '../auth.js';
 import { config, guardrails } from '../config.js';
 import { pool } from '../db.js';
 import { sendNotice } from '../mailer.js';
+import { TIER_LIMITS, defaultTier } from '../tiers.js';
 
 const Id = z.object({ id: z.string().uuid() });
 const category = z.enum(['promotional', 'transactional', 'service']);
@@ -21,7 +22,7 @@ const SenderBody = z.object({
   sender_id: z.string().trim().min(2).max(64),
   display_name: z.string().trim().min(2).max(60),
   category,
-  tier: z.number().int().min(1).max(5).default(1),
+  tier: z.number().int().min(0).max(4).optional(),
   daily_limit: z.number().int().positive().nullable().default(null),
   // The request this sender fulfils: it is marked approved and the requester is told.
   request_id: z.string().uuid().optional(),
@@ -96,11 +97,12 @@ export async function senderRoutes(app: FastifyInstance) {
     ]);
     const ids = senders.rows.length ? senders.rows.map((r) => r.sender_id) : [config.tc.senderId];
     const health = await senderHealth(ws, ids);
-    const limitOf = (l: number | null) => l ?? guardrails.promoDailySenderLimit;
+    // Tier 4 is unlimited (null).
+    const limitOf = (l: number | null, tier: number) => l ?? TIER_LIMITS[tier] ?? null;
     return {
       data: senders.rows.map((r) => ({
         ...r,
-        effective_daily_limit: limitOf(r.daily_limit),
+        effective_daily_limit: limitOf(r.daily_limit, r.tier),
         stats: health.get(r.sender_id) ?? null,
         // Super admins see which senders still need a Truecaller key on the server.
         ...(req.ctx.superAdmin ? { has_credential: Boolean(config.tc.senderKeys[r.sender_id] || config.tc.apiKey) } : {}),
@@ -171,7 +173,7 @@ export async function senderRoutes(app: FastifyInstance) {
          VALUES ($1, $2, $3, $4, $5, $6,
            (SELECT id FROM sender_requests WHERE id = $7 AND workspace_id = $1))
          RETURNING ${SENDER_COLUMNS}`,
-        [req.ctx.workspaceId, s.sender_id, s.display_name, s.category, s.tier, s.daily_limit, s.request_id ?? null],
+        [req.ctx.workspaceId, s.sender_id, s.display_name, s.category, s.tier ?? defaultTier(s.category), s.daily_limit, s.request_id ?? null],
       );
       await audit(req.ctx, 'sender.added', { sender_id: s.sender_id, request_id: rows[0].request_id });
       if (rows[0].request_id) {
@@ -192,10 +194,10 @@ export async function senderRoutes(app: FastifyInstance) {
     const p = Id.safeParse(req.params);
     const b = z.object({
       status: z.enum(['active', 'paused']).optional(),
-      tier: z.number().int().min(1).max(5).optional(),
+      tier: z.number().int().min(0).max(4).optional(),
       daily_limit: z.number().int().positive().nullable().optional(),
     }).safeParse(req.body);
-    if (!p.success || !b.success) return reply.code(400).send({ error: 'status must be active or paused; tier 1 to 5; daily_limit a positive number or null' });
+    if (!p.success || !b.success) return reply.code(400).send({ error: 'status must be active or paused; tier 0 to 4; daily_limit a positive number or null' });
     const { rows } = await pool.query(
       `UPDATE senders SET status = coalesce($3, status), tier = coalesce($4, tier),
          daily_limit = CASE WHEN $5::boolean THEN $6 ELSE daily_limit END
