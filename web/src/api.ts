@@ -156,6 +156,18 @@ export interface Campaign {
   failed: number;
   blocked: number;
   queued: number;
+  expired: number;
+  fallback: FallbackStep[];
+  ttl_seconds: number | null;
+}
+
+export type FallbackChannel = 'rcs' | 'whatsapp' | 'sms';
+export interface FallbackStep {
+  channel: FallbackChannel;
+  template: string;
+  language?: string;
+  // Template parameter -> contact column, or "=text" for a fixed value.
+  params: Record<string, string>;
 }
 
 export interface ReasonCategory {
@@ -163,7 +175,7 @@ export interface ReasonCategory {
   label: string;
   hint: string;
   count: number;
-  reasons: { status: 'failed' | 'blocked'; reason: string; count: number }[];
+  reasons: { status: 'failed' | 'blocked' | 'expired'; reason: string; count: number }[];
 }
 
 export interface Report {
@@ -176,10 +188,41 @@ export interface Report {
     avg_click_s: number | null; median_click_s: number | null;
   };
   clicks: { tracked: boolean; unique: number; total: number; by_button: { label: string; type: 'link' | 'reply' | 'text'; people: number; taps: number }[] };
-  reasons: { status: 'failed' | 'blocked'; reason: string; count: number; category: string }[];
+  reasons: { status: 'failed' | 'blocked' | 'expired'; reason: string; count: number; category: string }[];
   categories: ReasonCategory[];
   timeline: { minute: string; processed: number }[];
+  fallback: {
+    configured: FallbackChannel[];
+    messages: number;
+    reached: number;
+    by_channel: { channel: FallbackChannel; attempted: number; submitted: number; delivered: number; failed: number; pending: number }[];
+  };
+  incoming: { total: number; quick_replies: number; recent: { from_number: string; text: string | null; quick_reply: boolean; received_at: string }[] };
 }
+
+export interface Settings {
+  window: { enabled: boolean; start: string; end: string; after: 'pause' | 'stop' };
+  frequency: { enabled: boolean; count: number; days: number; scope: 'all' | 'promotional' };
+  defaults: { category: Category; ttl_hours: number };
+  fallback: {
+    onexaura: { base_url: string; api_key?: string; api_key_set?: boolean; api_key_last4?: string | null; callback_url?: string | null };
+    rcs: { enabled: boolean; bot_id: string };
+    whatsapp: { enabled: boolean; waba_id: string; sender: string };
+    sms: { enabled: boolean; sender: string; entity_id: string; type: 'Trans' | 'SI' | 'SE' | 'OTP' };
+  };
+}
+
+export interface SmsTemplate { id: string; name: string; dlt_template_id: string; body: string; variables: string[]; created_at: string }
+export interface FallbackTemplate { name: string; status: string; language: string; params: string[] }
+
+export const settingsApi = {
+  get: () => call<Settings>('GET', '/v1/settings'),
+  save: (s: Settings) => call<Settings>('PUT', '/v1/settings', s),
+  fallbackTemplates: (channel: 'rcs' | 'whatsapp') => call<{ templates: FallbackTemplate[]; message: string | null }>('GET', `/v1/fallback/templates?channel=${channel}`),
+  smsTemplates: () => call<{ data: SmsTemplate[] }>('GET', '/v1/sms-templates').then((r) => r.data),
+  addSmsTemplate: (t: Pick<SmsTemplate, 'name' | 'dlt_template_id' | 'body'>) => call<SmsTemplate>('POST', '/v1/sms-templates', t),
+  removeSmsTemplate: (id: string) => call<void>('DELETE', `/v1/sms-templates/${id}`),
+};
 
 export interface ApiKey {
   id: string;
@@ -235,7 +278,7 @@ export const lists = {
 export const campaigns = {
   all: () => call<{ data: Campaign[] }>('GET', '/v1/campaigns').then((r) => r.data),
   get: (id: string) => call<Campaign>('GET', `/v1/campaigns/${id}`),
-  create: (b: { name: string; template_id: string; list_id: string; sender_id?: string; variable_defaults?: Record<string, string>; track_links?: boolean }) => call<Campaign>('POST', '/v1/campaigns', b),
+  create: (b: { name: string; template_id: string; list_id: string; sender_id?: string; variable_defaults?: Record<string, string>; track_links?: boolean; fallback?: FallbackStep[]; ttl_seconds?: number }) => call<Campaign>('POST', '/v1/campaigns', b),
   launch: (id: string, scheduled_at?: string) => call<Campaign>('POST', `/v1/campaigns/${id}/launch`, scheduled_at ? { scheduled_at } : {}),
   cancel: (id: string) => call<Campaign>('POST', `/v1/campaigns/${id}/cancel`),
   remove: (id: string) => call<void>('DELETE', `/v1/campaigns/${id}`),
@@ -292,7 +335,7 @@ export const admin = {
 
 // ---- Customer webhooks ----
 
-export type WebhookEvent = 'message.sent' | 'message.delivered' | 'message.read' | 'message.failed' | 'campaign.started' | 'campaign.completed';
+export type WebhookEvent = 'delivery' | 'incoming' | 'url_click';
 
 export interface Webhook {
   id: string;
@@ -358,7 +401,7 @@ export interface Sender {
   status: 'active' | 'paused';
   tier: number;
   daily_limit: number | null;
-  effective_daily_limit: number;
+  effective_daily_limit: number | null;
   request_id: string | null;
   stats: SenderStats | null;
   created_at: string;

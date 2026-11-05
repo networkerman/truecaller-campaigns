@@ -13,6 +13,11 @@ const HEALTH: Record<SenderStats['health'], { label: string; cls: string; hint: 
   not_enough_data: { label: 'Not enough data', cls: 'st-draft', hint: 'Fewer than 20 messages in the last 7 days.' },
 };
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
+// Truecaller tiers and daily limits in India (Business Chat guardrails).
+const TIERS = [
+  { tier: 0, label: '10,000 a day' }, { tier: 1, label: '5,00,000 a day' }, { tier: 2, label: '25,00,000 a day' },
+  { tier: 3, label: '1,00,00,000 a day' }, { tier: 4, label: 'Unlimited' },
+];
 const blankRequest: SenderRequestInput = {
   display_name: '', legal_name: '', category: 'transactional', website: '', use_case: '', monthly_volume: '', sample_message: '', contact_email: '',
 };
@@ -143,7 +148,7 @@ function SenderCard({ name, senderId, category, tier, limit, stats, paused, warn
   senderId: string;
   category: Category | null;
   tier: number | null;
-  limit: number;
+  limit: number | null;
   stats: SenderStats | null;
   paused?: boolean;
   warn?: string | null;
@@ -171,8 +176,8 @@ function SenderCard({ name, senderId, category, tier, limit, stats, paused, warn
         <div><dt>Not on Truecaller</dt><dd>{stats?.unreachable_rate ?? '—'}{stats?.unreachable_rate != null && '%'}</dd></div>
       </dl>
       <div className="limit">
-        <div className="row-between small"><span className="muted">Promotional today</span><span>{fmt(used)} / {fmt(limit)}</span></div>
-        <div className="limit-track"><div style={{ width: `${Math.min(100, (used / Math.max(limit, 1)) * 100)}%` }} /></div>
+        <div className="row-between small"><span className="muted">Promotional today</span><span>{fmt(used)} / {limit === null ? 'Unlimited' : fmt(limit)}</span></div>
+        <div className="limit-track"><div style={{ width: limit === null ? '0%' : `${Math.min(100, (used / Math.max(limit, 1)) * 100)}%` }} /></div>
       </div>
       <div className="hint">{stats?.last_sent_at ? `Last message ${when(stats.last_sent_at)}` : 'No messages in the last 7 days'}</div>
       {warn && <div className="hint bad">{warn}</div>}
@@ -301,7 +306,7 @@ function AddSender({ request, onClose, onDone }: { request: SenderRequest | null
     sender_id: '',
     display_name: request?.display_name ?? '',
     category: request?.category ?? ('transactional' as Category),
-    tier: 1,
+    tier: request?.category === 'promotional' ? 1 : 4,
     daily_limit: '',
   });
   const { busy, error, run } = useAsync();
@@ -369,13 +374,13 @@ function LimitFields({ tier, limit, onChange }: { tier: number; limit: string; o
       <label>
         Truecaller tier
         <select className="input" value={tier} onChange={(e) => onChange(Number(e.target.value), limit)}>
-          {[1, 2, 3, 4, 5].map((t) => <option key={t} value={t}>Tier {t}</option>)}
+          {TIERS.map((t) => <option key={t.tier} value={t.tier}>Tier {t.tier} · {t.label}</option>)}
         </select>
-        <span className="hint">From the Truecaller partner portal. Truecaller's API doesn't report it, so keep it in sync here.</span>
+        <span className="hint">From the Truecaller partner portal; Truecaller's API doesn't report it. Promotional senders start at Tier 1, others at Tier 4. One promotional sender per brand until it reaches Tier 2.</span>
       </label>
       <label>
-        Daily promotional limit <span className="hint">Optional</span>
-        <input className="input" inputMode="numeric" value={limit} onChange={(e) => onChange(tier, e.target.value)} placeholder="Platform default" />
+        Daily promotional limit <span className="hint">Optional override</span>
+        <input className="input" inputMode="numeric" value={limit} onChange={(e) => onChange(tier, e.target.value)} placeholder={`Tier ${tier} limit: ${TIERS[tier]?.label ?? ''}`} />
         <span className="hint">Campaigns pause for the day when this sender reaches it.</span>
       </label>
     </>

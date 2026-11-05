@@ -5,6 +5,7 @@ import { CampaignsPage } from './CampaignsPage';
 import { ListsPage } from './ListsPage';
 import { ReportsPage } from './ReportsPage';
 import { SendersPage } from './SendersPage';
+import { SettingsPage } from './SettingsPage';
 import { TeamPage } from './TeamPage';
 import { TemplatesPage } from './TemplatesPage';
 import { useTestMode } from './testMode';
@@ -23,6 +24,7 @@ const NAV: { path: string; label: string; group: string; icon: string; need?: Pe
   { path: 'webhooks', icon: 'webhook', label: 'Webhooks', group: 'Developers', need: 'keys:manage' },
   { path: 'senders', icon: 'badge', label: 'Senders', group: 'Settings', need: 'reports:view' },
   { path: 'team', icon: 'team', label: 'Team', group: 'Settings' },
+  { path: 'settings', icon: 'gear', label: 'Settings', group: 'Settings', need: 'reports:view' },
   { path: 'workspaces', icon: 'grid', label: 'All workspaces', group: 'OneXtel', superAdmin: true },
 ];
 
@@ -147,6 +149,7 @@ export function App() {
         {page === 'webhooks' && <WebhooksPage />}
         {page === 'senders' && <SendersPage canRequest={user.permissions.includes('campaigns:manage')} />}
         {page === 'team' && <TeamPage user={user} />}
+        {page === 'settings' && <SettingsPage canEdit={user.permissions.includes('members:manage')} />}
         {page === 'workspaces' && <WorkspacesPage onOpen={switchTo} />}
       </main>
     </div>
@@ -165,6 +168,7 @@ const ICONS: Record<string, string> = {
   team: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1',
   grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   book: 'M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM4 5v16M8 7h7',
+  gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
 };
 
 function NavIcon({ name }: { name: string }) {

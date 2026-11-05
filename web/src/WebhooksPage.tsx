@@ -2,16 +2,14 @@ import { Fragment, useState } from 'react';
 import { webhooks, type Webhook, type WebhookDelivery, type WebhookEvent, type WebhookInput } from './api';
 import { Drawer, PageHead, useAsync, usePoll, when } from './ui';
 
+const EVENT_LABEL: Record<WebhookEvent, string> = { delivery: 'Delivery notification', incoming: 'Incoming', url_click: 'URL clicks' };
 const EVENT_HELP: Record<WebhookEvent, string> = {
-  'message.sent': 'Truecaller accepted the message',
-  'message.delivered': 'The message reached the phone',
-  'message.read': 'The recipient opened it',
-  'message.failed': 'The message could not be sent or delivered',
-  'campaign.started': 'A campaign began sending',
-  'campaign.completed': 'A campaign finished sending',
+  delivery: 'Sent, delivered, read, failed and expired; link-button taps; fallback sent, delivered or failed',
+  incoming: 'Replies from the person, including quick-reply taps',
+  url_click: 'Clicks on tracked links in the message and on link buttons',
 };
 const ALL_EVENTS = Object.keys(EVENT_HELP) as WebhookEvent[];
-const blank: WebhookInput = { url: '', description: '', events: ['message.delivered', 'message.failed'], enabled: true };
+const blank: WebhookInput = { url: '', description: '', events: ['delivery'], enabled: true };
 
 export function WebhooksPage() {
   const [data, setData] = useState<Webhook[] | null>(null);
@@ -33,7 +31,7 @@ export function WebhooksPage() {
     <>
       <PageHead
         title="Webhooks"
-        sub="Get message and campaign events posted to your own system as they happen."
+        sub="Get delivery notifications, incoming replies and URL clicks posted to your own system as they happen."
         action={<button className="btn primary" onClick={() => setEditing('new')}>Add endpoint</button>}
       />
       {error && <div className="banner error">{error}</div>}
@@ -55,7 +53,7 @@ export function WebhooksPage() {
                     <div className="strong clip">{w.url}</div>
                     {w.description && <div className="muted small">{w.description}</div>}
                   </td>
-                  <td className="muted small">{w.events.length === ALL_EVENTS.length ? 'All events' : w.events.join(', ')}</td>
+                  <td className="muted small">{w.events.length === ALL_EVENTS.length ? 'All events' : w.events.map((e) => EVENT_LABEL[e] ?? e).join(', ')}</td>
                   <td className="muted">{w.last_delivered_at ? when(w.last_delivered_at) : 'Never'}</td>
                   <td className={w.failed_24h ? 'bad strong' : 'muted'}>{w.failed_24h}</td>
                   <td><span className={`status ${w.enabled ? 'st-approved' : 'st-draft'}`}>{w.enabled ? 'enabled' : 'disabled'}</span></td>
@@ -130,7 +128,7 @@ function EndpointForm({ initial, onClose, onSaved }: { initial: Webhook | null; 
           {ALL_EVENTS.map((e) => (
             <label key={e} className="inline">
               <input type="checkbox" checked={form.events.includes(e)} onChange={() => toggle(e)} />
-              <code>{e}</code>
+              <b>{EVENT_LABEL[e]}</b>
               <span className="hint">{EVENT_HELP[e]}</span>
             </label>
           ))}
@@ -174,7 +172,7 @@ function EndpointDrawer({ hook, onClose, onEdit, onChanged }: { hook: Webhook; o
       <div className="pad">
         <dl className="facts">
           <dt>URL</dt><dd><code>{hook.url}</code></dd>
-          <dt>Events</dt><dd>{hook.events.join(', ')}</dd>
+          <dt>Events</dt><dd>{hook.events.map((e) => EVENT_LABEL[e] ?? e).join(', ')}</dd>
           <dt>Signing secret</dt>
           <dd>
             <div className="key-box">

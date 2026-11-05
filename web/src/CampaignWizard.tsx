@@ -1,18 +1,11 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { api, campaigns, lists, messages, senders, type ContactList, type SendersResponse, type Template } from './api';
+import { api, campaigns, lists, messages, senders, settingsApi, type ContactList, type FallbackStep, type SendersResponse, type Settings, type Template } from './api';
+import { FallbackPicker, fallbackComplete } from './FallbackPicker';
 import { AudiencePicker, audienceSource, emptyAudience, type Audience } from './Audience';
 import { TcPreview, fmt, useAsync, usePoll } from './ui';
 
 const VARS = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
 const STEPS = ['Audience', 'Message', 'Schedule', 'Check and send'] as const;
-
-// Truecaller is the only channel today. Fallbacks are shown so customers know they are coming.
-const CHANNELS = [
-  { id: 'tc', title: 'Truecaller only', text: 'Verified business chat in Truecaller.', on: true },
-  { id: 'tc-rcs', title: 'Truecaller, then RCS', text: 'RCS for people not reached on Truecaller.', on: false },
-  { id: 'tc-wa', title: 'Truecaller, then WhatsApp', text: 'WhatsApp for people not reached on Truecaller.', on: false },
-  { id: 'tc-sms', title: 'Truecaller, then SMS', text: 'An SMS for everyone else.', on: false },
-];
 
 // Full-page campaign creation: audience, message (sender, template, personalisation, test), schedule, review.
 export function CampaignWizard({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
@@ -29,6 +22,10 @@ export function CampaignWizard({ onClose, onCreated }: { onClose: () => void; on
   const [when, setWhen] = useState<'now' | 'later'>('now');
   const [at, setAt] = useState('');
   const [cohortSample, setCohortSample] = useState<Record<string, string>>({});
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [fallback, setFallback] = useState<FallbackStep[]>([]);
+  const [fbParams, setFbParams] = useState<Record<string, string[]>>({});
+  const [ttlHours, setTtlHours] = useState<number | null>(null);
   const imported = useRef<{ from: Audience; listId: string } | null>(null);
   const { busy, error, run, setError } = useAsync();
 
@@ -36,6 +33,7 @@ export function CampaignWizard({ onClose, onCreated }: { onClose: () => void; on
     api.listTemplates().then(setTemplates);
     lists.all().then(setLists);
     senders.all().then(setSenderInfo, () => {});
+    settingsApi.get().then(setSettings, () => {});
   }, 0, false);
 
   useEffect(() => {
@@ -67,7 +65,7 @@ export function CampaignWizard({ onClose, onCreated }: { onClose: () => void; on
 
   const stepOk = [
     name.trim().length > 0 && (cohort ? cohort.contact_count > 0 : recipients > 0),
-    !!t && t.status === 'approved',
+    !!t && t.status === 'approved' && fallbackComplete(fallback, fbParams),
     when === 'now' || (!!at && new Date(at).getTime() > Date.now()),
     true,
   ];
@@ -96,6 +94,7 @@ export function CampaignWizard({ onClose, onCreated }: { onClose: () => void; on
       const c = await campaigns.create({
         name: name.trim(), template_id: templateId, list_id, sender_id: sender?.sender_id,
         variable_defaults: defaults, track_links: hasLink ? trackClicks : undefined,
+        fallback, ttl_seconds: ttlHours ? ttlHours * 3600 : undefined,
       });
       if (launch) await campaigns.launch(c.id, when === 'later' ? new Date(at).toISOString() : undefined);
       onCreated(c.id);
@@ -156,17 +155,6 @@ export function CampaignWizard({ onClose, onCreated }: { onClose: () => void; on
           {step === 1 && (
             <section className="form">
               <h3 className="wz-title">What should it say?</h3>
-              <div>
-                <div className="label">Send by</div>
-                <div className="choice-grid two">
-                  {CHANNELS.map((c) => (
-                    <label key={c.id} className={`choice-card${c.on ? ' on' : ' disabled'}`} title={c.on ? undefined : 'Coming soon'}>
-                      <input type="radio" name="channel" checked={c.on} disabled={!c.on} readOnly />
-                      <span><span className="choice-title"><b>{c.title}</b>{!c.on && <span className="chip soon">Coming soon</span>}</span><span className="muted small">{c.text}</span></span>
-                    </label>
-                  ))}
-                </div>
-              </div>
               <div className="grid-2 tight">
                 <label>
                   Sender
@@ -208,6 +196,8 @@ export function CampaignWizard({ onClose, onCreated }: { onClose: () => void; on
                   Track link clicks (links go through a short redirect so clicks show in reports)
                 </label>
               )}
+              <FallbackPicker settings={settings} columns={columns} value={fallback} onChange={setFallback}
+                onParams={(k, p) => setFbParams((x) => (x[k]?.join(',') === p.join(',') ? x : { ...x, [k]: p }))} />
               {t && <TestSend templateId={t.id} senderId={sender?.sender_id} variables={Object.fromEntries(vars.map((v) => [v, String(sample[v] ?? '').trim() || defaults[v]?.trim() || '']))} />}
             </section>
           )}
@@ -232,6 +222,13 @@ export function CampaignWizard({ onClose, onCreated }: { onClose: () => void; on
                   {at && new Date(at).getTime() <= Date.now() && <span className="hint bad">Pick a time in the future.</span>}
                 </label>
               )}
+              <label>
+                Message expiry (hours)
+                <input className="input narrow-input" type="number" min={1} max={672} value={ttlHours ?? settings?.defaults.ttl_hours ?? 24}
+                  onChange={(e) => setTtlHours(Number(e.target.value) || null)} />
+                <span className="hint">Truecaller drops the message if it can't deliver it in this time. {fallback.length > 0 ? 'Expired messages go to the fallback.' : ''}</span>
+              </label>
+              {settings?.window.enabled && <p className="hint">Your send window is {settings.window.start}–{settings.window.end} IST; the campaign only sends inside it.</p>}
               {promo && <p className="hint">Promotional: contacts already sent 3 promo messages today, or 4 from this sender in 28 days, are skipped. A sender's daily limit pauses the campaign until the next day.</p>}
             </section>
           )}
@@ -244,7 +241,7 @@ export function CampaignWizard({ onClose, onCreated }: { onClose: () => void; on
                 ['Campaign', name], ['Contacts', `${fmt(recipients)}${cohort ? ` from ${cohort.name}` : ' from your upload'}`],
               ]} />
               <Review title="Message" onChange={() => setStep(1)} rows={[
-                ['Send by', 'Truecaller only'], ['Sender', `${senderLabel} (${senderValue})`],
+                ['Send by', ['Truecaller', ...fallback.map((f) => ({ rcs: 'RCS', whatsapp: 'WhatsApp', sms: 'SMS' })[f.channel])].join(', then ')], ['Sender', `${senderLabel} (${senderValue})`],
                 ['Template', t ? `${t.name} · ${t.category}` : '—'], ['Click tracking', hasLink ? (trackClicks ? 'On' : 'Off') : 'No links'],
               ]} />
               <Review title="Schedule" onChange={() => setStep(2)} rows={[['Sends', when === 'now' ? 'Now' : new Date(at).toLocaleString()]]} />
@@ -255,6 +252,7 @@ export function CampaignWizard({ onClose, onCreated }: { onClose: () => void; on
                 <Check ok={uncovered.length === 0} title={uncovered.length ? `No value for ${uncovered.map((v) => `{{${v}}}`).join(', ')}` : 'Every variable has a column or a default'}
                   sub={uncovered.length ? 'Contacts without a value fail. Add a default on the Message step.' : undefined} />
                 <Check ok title="Opted-out numbers are left out" />
+                {fallback.length > 0 && <Check ok={fallbackComplete(fallback, fbParams)} title="Fallback templates are chosen and their parameters mapped" />}
               </div>
             </section>
           )}
