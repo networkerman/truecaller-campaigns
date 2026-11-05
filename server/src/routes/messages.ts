@@ -3,10 +3,13 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import { z } from 'zod';
 import { requireAuth, requirePermission } from '../auth.js';
 import { config } from '../config.js';
+import { saveLinks } from '../links.js';
 import { getMessage, sendMessage } from '../messages.js';
+import { ButtonsSchema, MediaSchema, buildActions, type ActionRow, type Media } from '../rich.js';
 import type { MessagingProvider } from '../providers/types.js';
 import { checkSender } from './senders.js';
 import { getTemplate, render } from '../templates.js';
+import { getSettings } from '../settings.js';
 
 // Either a free-text body, or an approved template plus its variable values.
 const SendBody = z
@@ -14,9 +17,12 @@ const SendBody = z
     to: z.string(),
     sender_id: z.string().optional(),
     body: z.string().min(1).max(1000).optional(),
-    category: z.enum(['promotional', 'transactional', 'service']).default('transactional'),
+    category: z.enum(['promotional', 'transactional', 'service']).optional(),
     template_id: z.string().uuid().optional(),
     variables: z.record(z.string(), z.string()).default({}),
+    // With a free-text body: optional attachment and buttons. A template brings its own.
+    media: MediaSchema.optional(),
+    buttons: ButtonsSchema.default([]),
   })
   .refine((b) => Boolean(b.body) !== Boolean(b.template_id), { message: 'send either body or template_id' });
 
@@ -33,16 +39,27 @@ export async function messageRoutes(app: FastifyInstance, opts: { provider: Mess
     if (!phone?.isValid()) return reply.code(400).send({ error: 'invalid phone number' });
 
     let body = data.body ?? '';
-    let category: string = data.category;
+    const settings = await getSettings(req.ctx.workspaceId);
+    let category: string = data.category ?? settings.defaults.category;
+    let media: Media | null = data.media ?? null;
+    let buttons = data.buttons;
+    let defaults: Record<string, string> = {};
     if (data.template_id) {
       const t = await getTemplate(req.ctx.workspaceId, data.template_id);
       if (!t) return reply.code(400).send({ error: 'template not found' });
       if (t.status !== 'approved') return reply.code(400).send({ error: `template is ${t.status}, not approved` });
-      const out = render(t.body, data.variables);
+      const out = render(t.body, data.variables, t.variable_defaults);
       if ('error' in out) return reply.code(400).send(out);
       body = out.text;
       category = t.category;
+      media = t.media ?? null;
+      buttons = t.buttons ?? [];
+      defaults = t.variable_defaults ?? {};
     }
+    // Single sends don't rewrite links; button taps are still counted through their tags.
+    const built = buildActions(buttons, data.variables, defaults, false);
+    if ('error' in built) return reply.code(400).send(built);
+    const rows: ActionRow[] = built.rows;
 
     const sender = await checkSender(req.ctx.workspaceId, data.sender_id);
     if ('error' in sender) return reply.code(400).send({ error: sender.error });
@@ -53,7 +70,10 @@ export async function messageRoutes(app: FastifyInstance, opts: { provider: Mess
       category,
       body,
       templateId: data.template_id,
-    });
+      media,
+      actions: built.actions,
+      ttlSeconds: settings.defaults.ttl_hours * 3600,
+    }, (id) => saveLinks(id, null, rows));
     return reply.code(202).send(msg);
   });
 

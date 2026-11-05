@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { api, type Category, type Template, type TemplateInput } from './api';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { api, MEDIA_TYPES, type Button, type Category, type Media, type MediaType, type Template, type TemplateInput } from './api';
+import { PageHead, TcPreview, TcText } from './ui';
 
 const PLACEHOLDER = /\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g;
 const MAX_LEN = 1000;
@@ -9,6 +10,9 @@ const CATEGORIES: { value: Category; label: string; hint: string }[] = [
   { value: 'service', label: 'Service', hint: 'Account notices, reminders and alerts.' },
 ];
 
+const KIND_LABEL = (m: MediaType) => (m.startsWith('image/') ? 'Image' : m.startsWith('video/') ? 'Video' : 'File');
+const typeOf = (t: Pick<Template, 'media' | 'buttons'>) =>
+  [t.media && KIND_LABEL(t.media.mime_type), t.buttons?.length && `${t.buttons.length} button${t.buttons.length > 1 ? 's' : ''}`].filter(Boolean).join(' + ') || 'Text';
 const variablesOf = (body: string) => [...new Set([...body.matchAll(PLACEHOLDER)].map((m) => m[1]))];
 const fill = (body: string, values: Record<string, string>) =>
   body.replace(PLACEHOLDER, (_, v: string) => values[v] || `{{${v}}}`);
@@ -21,6 +25,13 @@ export function TemplatesPage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | Template['status']>('all');
+  const [layout, setLayoutState] = useState<'grid' | 'list'>(() => {
+    try { return localStorage.getItem('templates.layout') === 'list' ? 'list' : 'grid'; } catch { return 'grid'; }
+  });
+  const setLayout = (l: 'grid' | 'list') => {
+    setLayoutState(l);
+    try { localStorage.setItem('templates.layout', l); } catch { /* private mode: keep it for this visit only */ }
+  };
   const [editing, setEditing] = useState<Editing>(null);
 
   const load = () =>
@@ -38,15 +49,11 @@ export function TemplatesPage() {
 
   return (
     <>
-      <header className="page-head">
-        <div>
-          <h1>Templates</h1>
-          <p className="muted">Reusable messages for campaigns and the API. Only approved templates can be sent.</p>
-        </div>
-        <button className="btn primary" onClick={() => setEditing({ mode: 'new' })}>
-          New template
-        </button>
-      </header>
+      <PageHead
+        title="Templates"
+        sub="Reusable messages for campaigns and the API. Only approved templates can be sent."
+        action={<button className="btn primary" onClick={() => setEditing({ mode: 'new' })}>New template</button>}
+      />
 
       <div className="toolbar">
         <input className="input" placeholder="Search by name" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -57,11 +64,15 @@ export function TemplatesPage() {
             </button>
           ))}
         </div>
+        <div className="tabs layout-toggle" role="group" aria-label="Layout">
+          <button className={layout === 'grid' ? 'tab on' : 'tab'} onClick={() => setLayout('grid')} aria-pressed={layout === 'grid'} title="Grid">▦ Grid</button>
+          <button className={layout === 'list' ? 'tab on' : 'tab'} onClick={() => setLayout('list')} aria-pressed={layout === 'list'} title="List">☰ List</button>
+        </div>
       </div>
 
       {error && <div className="banner error">{error}</div>}
 
-      <div className="card">
+      <div className={layout === 'grid' && !loading && shown.length > 0 ? '' : 'card'}>
         {loading ? (
           <p className="empty">Loading templates…</p>
         ) : shown.length === 0 ? (
@@ -77,12 +88,29 @@ export function TemplatesPage() {
               <p>No templates match this filter.</p>
             )}
           </div>
+        ) : layout === 'grid' ? (
+          <div className="template-grid">
+            {shown.map((t) => (
+              <button key={t.id} className="template-card" onClick={() => setEditing({ mode: 'edit', template: t })}>
+                <TemplateThumb t={t} />
+                <div className="template-card-body">
+                  <span className="strong clip" title={t.name}>{t.name}</span>
+                  <div className="row-between">
+                    <span className={`chip cat-${t.category}`}>{t.category}</span>
+                    <span className={`status st-${t.status}`}>{t.status}</span>
+                  </div>
+                  <span className="muted small">Updated {new Date(t.updated_at).toLocaleDateString()}</span>
+                </div>
+              </button>
+            ))}
+          </div>
         ) : (
           <table className="table">
             <thead>
               <tr>
                 <th>Name</th>
                 <th>Category</th>
+                <th>Type</th>
                 <th>Variables</th>
                 <th>Status</th>
                 <th>Last updated</th>
@@ -98,6 +126,7 @@ export function TemplatesPage() {
                   <td>
                     <span className={`chip cat-${t.category}`}>{t.category}</span>
                   </td>
+                  <td><span className="chip">{typeOf(t)}</span></td>
                   <td className="muted">{t.variables.length ? t.variables.join(', ') : 'None'}</td>
                   <td>
                     <span className={`status st-${t.status}`}>{t.status}</span>
@@ -135,15 +164,27 @@ function Editor({
   onChanged: (t: Template | null) => void;
 }) {
   const [form, setForm] = useState<TemplateInput>(
-    template ? { name: template.name, category: template.category, body: template.body } : { name: '', category: 'promotional', body: '' },
+    template
+      ? { name: template.name, category: template.category, body: template.body, variable_defaults: { ...template.variable_defaults },
+          media: template.media, buttons: template.buttons ?? [] }
+      : { name: '', category: 'promotional', body: '', variable_defaults: {}, media: null, buttons: [] },
   );
-  const [samples, setSamples] = useState<Record<string, string>>({});
+  const defaults = form.variable_defaults ?? {};
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const vars = useMemo(() => variablesOf(form.body), [form.body]);
-  const dirty = !template || form.name !== template.name || form.category !== template.category || form.body !== template.body;
-  const valid = form.name.trim() && form.body.trim() && form.body.length <= MAX_LEN;
+  const buttons = form.buttons ?? [];
+  // Button labels and URLs can be personalised too.
+  const allText = [form.body, ...buttons.flatMap((b) => [b.text, b.type === 'link' ? b.url : ''])].join('\n');
+  const vars = useMemo(() => variablesOf(allText), [allText]);
+  const buttonsOk = buttons.every((b) => b.text.trim() && (b.type === 'reply' || /^(https:\/\/|[a-z][a-z0-9+.-]*:\/\/)\S+/i.test(b.url.trim()) || /^https:\/\/\S*\{\{/.test(b.url)));
+  const sameDefaults = (a: Record<string, string>, b: Record<string, string>) =>
+    vars.every((v) => (a[v] ?? '').trim() === (b[v] ?? '').trim());
+  const dirty = !template || form.name !== template.name || form.category !== template.category || form.body !== template.body
+    || !sameDefaults(defaults, template.variable_defaults ?? {})
+    || JSON.stringify(form.media ?? null) !== JSON.stringify(template.media ?? null)
+    || JSON.stringify(buttons) !== JSON.stringify(template.buttons ?? []);
+  const valid = form.name.trim() && form.body.trim() && form.body.length <= MAX_LEN && buttonsOk;
   const canSubmit = template && !dirty && (template.status === 'draft' || template.status === 'rejected');
 
   useEffect(() => {
@@ -170,9 +211,15 @@ function Editor({
     if (confirm(`Delete "${template!.name}"? This can't be undone.`)) run(() => api.deleteTemplate(template!.id).then(() => null));
   };
 
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  // Inserts at the cursor. Name it after the Excel column that will fill it.
   const insertVar = () => {
-    const name = prompt('Variable name (letters, numbers, underscore)')?.trim();
-    if (name && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) setForm((f) => ({ ...f, body: `${f.body}{{${name}}}` }));
+    const raw = prompt('Variable name: use the column name from your Excel file, e.g. name or order_id')?.trim();
+    const name = raw?.toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+    if (!name || !/^[a-z_][a-z0-9_]*$/.test(name)) return;
+    const el = bodyRef.current;
+    const at = el ? el.selectionStart : form.body.length;
+    setForm((f) => ({ ...f, body: `${f.body.slice(0, at)}{{${name}}}${f.body.slice(at)}` }));
   };
 
   return (
@@ -218,7 +265,7 @@ function Editor({
                 Message
                 <button type="button" className="link" onClick={insertVar}>+ Add variable</button>
               </span>
-              <textarea className="input" rows={7} value={form.body}
+              <textarea ref={bodyRef} className="input" rows={7} value={form.body}
                 placeholder={'Hi {{name}}, your order {{order_id}} is on the way. Track it here: {{link}}'}
                 onChange={(e) => setForm({ ...form, body: e.target.value })} />
               <span className={form.body.length > MAX_LEN ? 'hint bad' : 'hint'}>
@@ -226,14 +273,21 @@ function Editor({
               </span>
             </label>
 
+            <MediaField media={form.media ?? null} onChange={(media) => setForm((f) => ({ ...f, media }))} />
+            <ButtonsField buttons={buttons} onChange={(buttons) => setForm((f) => ({ ...f, buttons }))} />
+
             {vars.length > 0 && (
               <fieldset className="samples">
-                <legend>Sample values for preview</legend>
+                <legend>Default values</legend>
+                <p className="hint">
+                  Values come from the list column with the same name (e.g. a <code>name</code> column in your Excel fills {'{{name}}'}).
+                  The default is used when a contact's cell is empty. Leave it blank to skip those contacts instead.
+                </p>
                 {vars.map((v) => (
                   <label key={v} className="inline">
                     <code>{v}</code>
-                    <input className="input" value={samples[v] ?? ''} placeholder={`Sample ${v}`}
-                      onChange={(e) => setSamples({ ...samples, [v]: e.target.value })} />
+                    <input className="input" value={defaults[v] ?? ''} maxLength={200} placeholder={v === 'name' ? 'e.g. there' : 'Default value'}
+                      onChange={(e) => setForm({ ...form, variable_defaults: { ...defaults, [v]: e.target.value } })} />
                   </label>
                 ))}
               </fieldset>
@@ -243,16 +297,8 @@ function Editor({
           </div>
 
           <div className="preview">
-            <div className="phone">
-              <div className="phone-head">
-                <span className="avatar">B</span>
-                <div>
-                  <div className="strong">Your Brand</div>
-                  <div className="verified">Verified business</div>
-                </div>
-              </div>
-              <div className="bubble">{form.body ? fill(form.body, samples) : <span className="muted">Your message preview shows here</span>}</div>
-            </div>
+            <TcPreview sender="Your brand" text={form.body ? fill(form.body, defaults) : ''} media={form.media}
+              buttons={buttons.map((b) => ({ ...b, text: fill(b.text, defaults) || (b.type === 'link' ? 'Link button' : 'Quick reply') }))} />
           </div>
         </div>
 
@@ -271,5 +317,108 @@ function Editor({
         </footer>
       </section>
     </div>
+  );
+}
+
+// Top of a grid card: the image when there is one, otherwise the message as a chat bubble.
+function TemplateThumb({ t }: { t: Template }) {
+  const image = t.media?.mime_type.startsWith('image/') ? t.media.url : null;
+  return (
+    <div className="template-thumb">
+      <div className="thumb-bubble">
+        {image && <img className="thumb-img" src={image} alt="" loading="lazy" />}
+        {t.media && !image && <div className="tc-file small"><span className="tc-file-icon">{t.media.mime_type.startsWith('video/') ? '▶' : '📄'}</span><span className="tc-file-text"><b>{t.media.file_name || (t.media.mime_type.startsWith('video/') ? 'Video' : 'File')}</b></span></div>}
+        <div className="thumb-text"><TcText text={t.body} /></div>
+        {t.buttons?.length > 0 && <div className="thumb-buttons">{t.buttons.map((b, i) => <span key={i}>{b.text}</span>)}</div>}
+      </div>
+    </div>
+  );
+}
+
+// One optional attachment: upload a file (we host it) or paste a public https link.
+function MediaField({ media, onChange }: { media: Media | null; onChange: (m: Media | null) => void }) {
+  const [mode, setMode] = useState<'none' | 'upload' | 'link'>(media ? 'link' : 'none');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pick = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    if (!MEDIA_TYPES.includes(file.type as MediaType)) return setError('Use a JPEG, PNG or GIF image, an MP4 or MOV video, or a PDF or text file.');
+    if (file.size > 20 * 1024 * 1024) return setError('Files can be up to 20 MB.');
+    setBusy(true);
+    try {
+      const m = await api.uploadMedia(file);
+      onChange({ url: m.url, mime_type: m.mime_type, file_name: m.file_name });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <fieldset className="samples">
+      <legend>Media <span className="hint">Optional</span></legend>
+      <div className="tabs small">
+        {(['none', 'upload', 'link'] as const).map((m) => (
+          <button key={m} type="button" className={mode === m ? 'tab on' : 'tab'} onClick={() => (setMode(m), m === 'none' && onChange(null))}>
+            {m === 'none' ? 'None' : m === 'upload' ? 'Upload file' : 'Use a link'}
+          </button>
+        ))}
+      </div>
+      {mode === 'upload' && (
+        <label className="file-pick">
+          <input type="file" accept={MEDIA_TYPES.join(',')} onChange={(e) => pick(e.target.files?.[0])} disabled={busy} />
+          <span className="hint">{busy ? 'Uploading…' : 'Image (JPEG, PNG, GIF), video (MP4, MOV) or file (PDF, TXT), up to 20 MB.'}</span>
+        </label>
+      )}
+      {mode === 'link' && (
+        <>
+          <input className="input" placeholder="https://… public link to the file" value={media?.url ?? ''}
+            onChange={(e) => onChange({ url: e.target.value.trim(), mime_type: media?.mime_type ?? 'image/jpeg', file_name: media?.file_name })} />
+          <select className="input" value={media?.mime_type ?? 'image/jpeg'} onChange={(e) => onChange({ url: media?.url ?? '', mime_type: e.target.value as MediaType, file_name: media?.file_name })}>
+            {MEDIA_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </>
+      )}
+      {media && (media.mime_type === 'application/pdf' || media.mime_type === 'text/plain') && (
+        <label>
+          File name people see
+          <input className="input" value={media.file_name ?? ''} placeholder="e.g. invoice.pdf" onChange={(e) => onChange({ ...media, file_name: e.target.value })} />
+        </label>
+      )}
+      {media && mode !== 'none' && <span className="hint">Attached: {media.file_name || media.url}</span>}
+      {error && <span className="hint bad">{error}</span>}
+    </fieldset>
+  );
+}
+
+// Up to 3 buttons: link buttons open a page or app; quick replies send their text back as the person's reply.
+function ButtonsField({ buttons, onChange }: { buttons: Button[]; onChange: (b: Button[]) => void }) {
+  const set = (i: number, b: Button) => onChange(buttons.map((x, j) => (j === i ? b : x)));
+  return (
+    <fieldset className="samples">
+      <legend>Buttons <span className="hint">Optional, up to 3</span></legend>
+      {buttons.map((b, i) => (
+        <div key={i} className="button-row">
+          <select className="input" value={b.type} onChange={(e) => set(i, e.target.value === 'link' ? { type: 'link', text: b.text, url: '' } : { type: 'reply', text: b.text })}>
+            <option value="link">Link</option>
+            <option value="reply">Quick reply</option>
+          </select>
+          <input className="input" value={b.text} maxLength={b.type === 'link' ? 40 : 100} placeholder={b.type === 'link' ? 'Button text, e.g. Track order' : 'Reply text, e.g. Call me back'}
+            onChange={(e) => set(i, { ...b, text: e.target.value })} />
+          {b.type === 'link' && (
+            <input className="input" value={b.url} placeholder="https://… (can use {{variables}})" onChange={(e) => set(i, { ...b, url: e.target.value })} />
+          )}
+          <button type="button" className="icon-btn" aria-label="Remove button" onClick={() => onChange(buttons.filter((_, j) => j !== i))}>×</button>
+        </div>
+      ))}
+      {buttons.length < 3 && (
+        <div className="row-gap">
+          <button type="button" className="btn small" onClick={() => onChange([...buttons, { type: 'link', text: '', url: '' }])}>+ Link button</button>
+          <button type="button" className="btn small" onClick={() => onChange([...buttons, { type: 'reply', text: '' }])}>+ Quick reply</button>
+        </div>
+      )}
+      <span className="hint">Taps are counted in reports. Link buttons need https (or an app link).</span>
+    </fieldset>
   );
 }

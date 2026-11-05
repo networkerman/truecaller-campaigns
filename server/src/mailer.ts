@@ -60,3 +60,51 @@ export async function sendInviteEmail(log: FastifyBaseLogger, i: Invite) {
     text: `Hi ${i.name},\n\n${i.inviterName} invited you to the ${i.workspaceName} workspace as ${roleLabel(i.role)}.\n\n${how}\n`,
   });
 }
+
+async function tarangSend(payload: Record<string, unknown>) {
+  const res = await fetch(`${config.tarangApiUrl}/v1/messages`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${config.tarangApiKey}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ from: config.mailFrom, ...payload }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`Tarang send failed: ${res.status} ${await res.text()}`);
+}
+
+// Plain notification email (sender requests and the like). Never throws: a failed notice
+// is logged and must not undo the action that triggered it.
+export async function sendNotice(log: FastifyBaseLogger, n: { to: string[]; subject: string; text: string }) {
+  const to = [...new Set(n.to.map((e) => e.trim().toLowerCase()).filter(Boolean))];
+  if (!to.length) return;
+  try {
+    if (config.tarangApiKey) await tarangSend({ to, subject: n.subject, text: n.text });
+    else if (transport) await transport.sendMail({ from: config.mailFrom, to, subject: n.subject, text: n.text });
+    else log.warn({ to, subject: n.subject }, 'no mail configured, notice not emailed');
+  } catch (err) {
+    log.error({ err, to, subject: n.subject }, 'notice email failed');
+  }
+}
+
+// Security notice for a new API key, through Tarang's published `api-key-created` template.
+export async function sendApiKeyCreatedEmail(
+  log: FastifyBaseLogger,
+  k: { to: { email: string; name: string }[]; actor: string; keyName: string; last4: string; createdAt: Date },
+) {
+  const keysUrl = `${config.publicUrl}/#/api-keys`;
+  for (const r of k.to) {
+    const key = { name: k.keyName, last4: k.last4, createdAt: k.createdAt.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST' };
+    try {
+      if (config.tarangApiKey) {
+        await tarangSend({ to: [r.email], template: { id: 'api-key-created', variables: { name: r.name, actor: k.actor, key, keysUrl, appUrl: config.publicUrl } } });
+      } else {
+        await sendNotice(log, {
+          to: [r.email],
+          subject: `New API key created: ${k.keyName}`,
+          text: `Hi ${r.name},\n\n${k.actor} created the API key "${k.keyName}" (ending ${k.last4}) at ${key.createdAt}.\n\nIf you didn't expect this, revoke it: ${keysUrl}\n`,
+        });
+      }
+    } catch (err) {
+      log.error({ err, to: r.email }, 'api key email failed');
+    }
+  }
+}

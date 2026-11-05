@@ -38,6 +38,8 @@ export const config = {
   // Shown on the Senders page: who registers new Truecaller senders for customers.
   senderContactName: env.SENDER_CONTACT_NAME ?? 'your OneXtel account manager',
   senderContactEmail: env.SENDER_CONTACT_EMAIL ?? '',
+  // Onboarding team emailed about new sender requests. Comma separated; falls back to the contact email, then super admins.
+  senderRequestEmails: (env.SENDER_REQUEST_EMAILS ?? '').split(',').map((e) => e.trim()).filter(Boolean),
   mailFrom: env.MAIL_FROM ?? 'Truecaller Campaigns <no-reply@onextel.com>',
   // Session cookies need HTTPS. Turn off only for plain http testing away from localhost.
   secureCookies: env.COOKIE_SECURE !== 'false',

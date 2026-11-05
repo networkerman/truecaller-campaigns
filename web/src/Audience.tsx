@@ -158,7 +158,7 @@ export function AudiencePicker({ value, onChange, cohorts, variables }: {
       {value.check && <CheckSummary check={value.check} />}
       {missing.length > 0 && (
         <div className="banner warn">
-          No column for {missing.map((m) => `{{${m}}}`).join(', ')}. Those contacts will fail with a missing value.
+          No column for {missing.map((m) => `{{${m}}}`).join(', ')}. Add a default below, or those contacts will fail with a missing value.
         </div>
       )}
     </div>

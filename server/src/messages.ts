@@ -1,8 +1,11 @@
 import { emitMessageEvent } from './customerWebhooks.js';
 import { pool } from './db.js';
+import { fallsBack, queueFallback } from './fallback.js';
+import { config } from './config.js';
 import type { MessagingProvider, MessageStatus, StatusUpdate } from './providers/types.js';
 
-const rank: Record<MessageStatus, number> = { queued: 0, sent: 1, delivered: 2, read: 3, failed: 4, blocked: 4 };
+// A late delivered receipt still beats expired; failed and blocked are final.
+const rank: Record<MessageStatus, number> = { queued: 0, sent: 1, expired: 1.5, delivered: 2, read: 3, failed: 4, blocked: 4 };
 
 export interface NewMessage {
   workspaceId: string;
@@ -13,6 +16,9 @@ export interface NewMessage {
   templateId?: string;
   campaignId?: string;
   contactId?: string;
+  ttlSeconds?: number;
+  media?: import('./rich.js').Media | null;
+  actions?: import('./rich.js').Action[];
 }
 
 // Inserts a message row. Returns null when this campaign contact already has a message (another worker got it).
@@ -23,12 +29,13 @@ export async function insertMessage(
   error: string | null = null,
 ): Promise<string | null> {
   const { rows } = await pool.query(
-    `INSERT INTO messages (to_number, sender_id, category, body, provider, template_id, campaign_id, contact_id, status, error, workspace_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `INSERT INTO messages (to_number, sender_id, category, body, provider, template_id, campaign_id, contact_id, status, error, workspace_id, extras)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      ON CONFLICT (campaign_id, contact_id) WHERE campaign_id IS NOT NULL DO NOTHING
      RETURNING id`,
     [msg.to, msg.senderId, msg.category, msg.body, provider.name, msg.templateId ?? null,
-     msg.campaignId ?? null, msg.contactId ?? null, status, error, msg.workspaceId],
+     msg.campaignId ?? null, msg.contactId ?? null, status, error, msg.workspaceId,
+     msg.media || msg.actions?.length ? { media: msg.media ?? null, actions: msg.actions ?? [] } : null],
   );
   if (!rows[0]) return null;
   await logEvent(rows[0].id, status, error ? { error } : null);
@@ -39,10 +46,11 @@ export async function insertMessage(
 // Hands a queued message to the provider and records the outcome.
 export async function deliver(provider: MessagingProvider, id: string, msg: NewMessage) {
   try {
-    const res = await provider.send({ messageId: id, to: msg.to, senderId: msg.senderId, body: msg.body, campaignId: msg.campaignId });
+    const ttl = msg.ttlSeconds ?? config.tc.ttlSeconds;
+    const res = await provider.send({ messageId: id, to: msg.to, senderId: msg.senderId, body: msg.body, campaignId: msg.campaignId, ttlSeconds: ttl, media: msg.media, actions: msg.actions });
     await pool.query(
-      `UPDATE messages SET provider_message_id = $2, status = $3, updated_at = now() WHERE id = $1`,
-      [id, res.providerMessageId, res.status],
+      `UPDATE messages SET provider_message_id = $2, status = $3, expires_at = now() + make_interval(secs => $4), updated_at = now() WHERE id = $1`,
+      [id, res.providerMessageId, res.status, ttl],
     );
     await logEvent(id, res.status, null);
     await emitMessageEvent(id, res.status);
@@ -51,11 +59,14 @@ export async function deliver(provider: MessagingProvider, id: string, msg: NewM
     await pool.query(`UPDATE messages SET status = 'failed', error = $2, updated_at = now() WHERE id = $1`, [id, error]);
     await logEvent(id, 'failed', { error });
     await emitMessageEvent(id, 'failed', error);
+    if (msg.campaignId && fallsBack(error)) await queueFallback(id);
   }
 }
 
-export async function sendMessage(provider: MessagingProvider, msg: NewMessage) {
+// beforeSend runs once the message row exists, e.g. to store its button rows.
+export async function sendMessage(provider: MessagingProvider, msg: NewMessage, beforeSend?: (id: string) => Promise<void>) {
   const id = (await insertMessage(provider, msg))!;
+  await beforeSend?.(id);
   await deliver(provider, id, msg);
   return getMessage(msg.workspaceId, id);
 }
@@ -69,13 +80,14 @@ export async function applyStatusUpdate(u: StatusUpdate) {
   if (rank[u.status] > rank[status]) {
     await pool.query(`UPDATE messages SET status = $2, error = $3, updated_at = now() WHERE id = $1`, [id, u.status, u.error ?? null]);
     await emitMessageEvent(id, u.status, u.error);
+    if (u.status === 'failed') await queueFallback(id);
   }
   return true;
 }
 
 export async function getMessage(ws: string, id: string) {
   const { rows } = await pool.query(
-    `SELECT id, to_number AS to, sender_id, category, template_id, campaign_id, body, status, error, created_at, updated_at
+    `SELECT id, to_number AS to, sender_id, category, template_id, campaign_id, body, extras, status, error, created_at, updated_at
      FROM messages WHERE id = $1 AND workspace_id = $2`,
     [id, ws],
   );

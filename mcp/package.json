@@ -1,0 +1,13 @@
+{
+  "name": "truecaller-campaigns-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MCP server for Truecaller Campaigns: send messages and run campaigns from Claude Code",
+  "type": "module",
+  "bin": { "truecaller-campaigns-mcp": "index.mjs" },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7"
+  }
+}

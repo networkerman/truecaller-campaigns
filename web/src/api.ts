@@ -42,19 +42,32 @@ export const auth = {
 export type Category = 'promotional' | 'transactional' | 'service';
 export type TemplateStatus = 'draft' | 'submitted' | 'approved' | 'rejected';
 
+export type MediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'video/mp4' | 'video/quicktime' | 'application/pdf' | 'text/plain';
+export const MEDIA_TYPES: MediaType[] = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'video/quicktime', 'application/pdf', 'text/plain'];
+export interface Media {
+  url: string;
+  mime_type: MediaType;
+  file_name?: string;
+}
+export type Button = { type: 'link'; text: string; url: string } | { type: 'reply'; text: string };
+
 export interface Template {
   id: string;
   name: string;
   category: Category;
   body: string;
   variables: string[];
+  // Used when a contact's column for that variable is empty.
+  variable_defaults: Record<string, string>;
+  media: Media | null;
+  buttons: Button[];
   status: TemplateStatus;
   reject_reason: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export type TemplateInput = Pick<Template, 'name' | 'category' | 'body'>;
+export type TemplateInput = Pick<Template, 'name' | 'category' | 'body'> & { variable_defaults?: Record<string, string>; media?: Media | null; buttons?: Button[] };
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await request(path, {
@@ -74,6 +87,13 @@ export const api = {
   updateTemplate: (id: string, t: TemplateInput) => call<Template>('PUT', `/v1/templates/${id}`, t),
   deleteTemplate: (id: string) => call<void>('DELETE', `/v1/templates/${id}`),
   submitTemplate: (id: string) => call<Template>('POST', `/v1/templates/${id}/submit`),
+  // Stores the file on our server and returns the public URL Truecaller downloads it from.
+  uploadMedia: async (file: File): Promise<Media & { size: number }> => {
+    const res = await request('/v1/media', { method: 'POST', headers: { 'content-type': file.type, 'x-file-name': encodeURIComponent(file.name) }, body: file });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error ?? `Upload failed (${res.status})`);
+    return data;
+  },
 };
 
 export interface ContactList {
@@ -116,6 +136,8 @@ export interface Campaign {
   template_id: string;
   template_name: string;
   template_body: string;
+  template_media: Media | null;
+  template_buttons: Button[];
   template_status: string;
   category: Category;
   list_id: string;
@@ -134,15 +156,73 @@ export interface Campaign {
   failed: number;
   blocked: number;
   queued: number;
+  expired: number;
+  fallback: FallbackStep[];
+  ttl_seconds: number | null;
+}
+
+export type FallbackChannel = 'rcs' | 'whatsapp' | 'sms';
+export interface FallbackStep {
+  channel: FallbackChannel;
+  template: string;
+  language?: string;
+  // Template parameter -> contact column, or "=text" for a fixed value.
+  params: Record<string, string>;
+}
+
+export interface ReasonCategory {
+  key: string;
+  label: string;
+  hint: string;
+  count: number;
+  reasons: { status: 'failed' | 'blocked' | 'expired'; reason: string; count: number }[];
 }
 
 export interface Report {
   campaign: Campaign;
-  funnel: { stage: string; count: number }[];
-  rates: { delivery_rate: number; read_rate: number; failure_rate: number; blocked_rate: number };
-  reasons: { status: 'failed' | 'blocked'; reason: string; count: number }[];
+  funnel: { stage: string; count: number; bad?: boolean }[];
+  rates: { delivery_rate: number; read_rate: number; click_rate: number | null; failure_rate: number; blocked_rate: number };
+  timing: {
+    avg_deliver_s: number | null; median_deliver_s: number | null;
+    avg_read_s: number | null; median_read_s: number | null;
+    avg_click_s: number | null; median_click_s: number | null;
+  };
+  clicks: { tracked: boolean; unique: number; total: number; by_button: { label: string; type: 'link' | 'reply' | 'text'; people: number; taps: number }[] };
+  reasons: { status: 'failed' | 'blocked' | 'expired'; reason: string; count: number; category: string }[];
+  categories: ReasonCategory[];
   timeline: { minute: string; processed: number }[];
+  fallback: {
+    configured: FallbackChannel[];
+    messages: number;
+    reached: number;
+    by_channel: { channel: FallbackChannel; attempted: number; submitted: number; delivered: number; failed: number; pending: number }[];
+  };
+  incoming: { total: number; quick_replies: number; recent: { from_number: string; text: string | null; quick_reply: boolean; received_at: string }[] };
 }
+
+export interface Settings {
+  window: { enabled: boolean; start: string; end: string; after: 'pause' | 'stop' };
+  frequency: { enabled: boolean; count: number; days: number; scope: 'all' | 'promotional' };
+  defaults: { category: Category; ttl_hours: number };
+  fallback: {
+    onexaura: { base_url: string; api_key?: string; api_key_set?: boolean; api_key_last4?: string | null; callback_url?: string | null };
+    rcs: { enabled: boolean; bot_id: string };
+    whatsapp: { enabled: boolean; waba_id: string; sender: string };
+    sms: { enabled: boolean; sender: string; entity_id: string; type: 'Trans' | 'SI' | 'SE' | 'OTP' };
+  };
+}
+
+export interface SmsTemplate { id: string; name: string; dlt_template_id: string; body: string; variables: string[]; created_at: string }
+export interface FallbackTemplate { name: string; status: string; language: string; params: string[] }
+
+export const settingsApi = {
+  get: () => call<Settings>('GET', '/v1/settings'),
+  save: (s: Settings) => call<Settings>('PUT', '/v1/settings', s),
+  fallbackTemplates: (channel: 'rcs' | 'whatsapp') => call<{ templates: FallbackTemplate[]; message: string | null }>('GET', `/v1/fallback/templates?channel=${channel}`),
+  smsTemplates: () => call<{ data: SmsTemplate[] }>('GET', '/v1/sms-templates').then((r) => r.data),
+  addSmsTemplate: (t: Pick<SmsTemplate, 'name' | 'dlt_template_id' | 'body'>) => call<SmsTemplate>('POST', '/v1/sms-templates', t),
+  removeSmsTemplate: (id: string) => call<void>('DELETE', `/v1/sms-templates/${id}`),
+};
 
 export interface ApiKey {
   id: string;
@@ -173,6 +253,12 @@ export async function downloadCsv(path: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+export const messages = {
+  // Sends one real message now, e.g. a test of a template before a campaign.
+  send: (b: { to: string; template_id: string; sender_id?: string; variables: Record<string, string> }) =>
+    call<{ id: string; status: string; error: string | null }>('POST', '/v1/messages', b),
+};
+
 export const lists = {
   all: () => call<{ data: ContactList[] }>('GET', '/v1/lists').then((r) => r.data),
   get: (id: string) => call<ListDetail>('GET', `/v1/lists/${id}`),
@@ -192,7 +278,7 @@ export const lists = {
 export const campaigns = {
   all: () => call<{ data: Campaign[] }>('GET', '/v1/campaigns').then((r) => r.data),
   get: (id: string) => call<Campaign>('GET', `/v1/campaigns/${id}`),
-  create: (b: { name: string; template_id: string; list_id: string; sender_id?: string }) => call<Campaign>('POST', '/v1/campaigns', b),
+  create: (b: { name: string; template_id: string; list_id: string; sender_id?: string; variable_defaults?: Record<string, string>; track_links?: boolean; fallback?: FallbackStep[]; ttl_seconds?: number }) => call<Campaign>('POST', '/v1/campaigns', b),
   launch: (id: string, scheduled_at?: string) => call<Campaign>('POST', `/v1/campaigns/${id}/launch`, scheduled_at ? { scheduled_at } : {}),
   cancel: (id: string) => call<Campaign>('POST', `/v1/campaigns/${id}/cancel`),
   remove: (id: string) => call<void>('DELETE', `/v1/campaigns/${id}`),
@@ -249,7 +335,7 @@ export const admin = {
 
 // ---- Customer webhooks ----
 
-export type WebhookEvent = 'message.sent' | 'message.delivered' | 'message.read' | 'message.failed' | 'campaign.started' | 'campaign.completed';
+export type WebhookEvent = 'delivery' | 'incoming' | 'url_click';
 
 export interface Webhook {
   id: string;
@@ -293,18 +379,41 @@ export const webhooks = {
 
 // ---- Senders ----
 
+export interface SenderStats {
+  sent: number;
+  delivered: number;
+  read: number;
+  failed: number;
+  not_on_truecaller: number;
+  promo_today: number;
+  last_sent_at: string | null;
+  delivery_rate: number | null;
+  read_rate: number | null;
+  unreachable_rate: number | null;
+  health: 'good' | 'watch' | 'poor' | 'not_enough_data';
+}
+
 export interface Sender {
   id: string;
   sender_id: string;
   display_name: string;
   category: Category;
   status: 'active' | 'paused';
+  tier: number;
+  daily_limit: number | null;
+  effective_daily_limit: number | null;
+  request_id: string | null;
+  stats: SenderStats | null;
   created_at: string;
   has_credential?: boolean;
 }
 
 export interface SenderRequest {
   id: string;
+  ref: string;
+  sample_message: string;
+  contact_email: string;
+  sender_id: string | null;
   display_name: string;
   legal_name: string;
   category: Category;
@@ -317,12 +426,14 @@ export interface SenderRequest {
   created_at: string;
 }
 
-export type SenderRequestInput = Pick<SenderRequest, 'display_name' | 'legal_name' | 'category' | 'website' | 'use_case' | 'monthly_volume'>;
+export type SenderRequestInput = Pick<SenderRequest, 'display_name' | 'legal_name' | 'category' | 'website' | 'use_case' | 'monthly_volume' | 'sample_message' | 'contact_email'>;
 
 export interface SendersResponse {
   data: Sender[];
   requests: SenderRequest[];
   default_sender: string;
+  default_sender_stats: SenderStats | null;
+  default_daily_limit: number;
   contact: { name: string; email: string | null };
   can_manage: boolean;
 }
@@ -330,8 +441,9 @@ export interface SendersResponse {
 export const senders = {
   all: () => call<SendersResponse>('GET', '/v1/senders'),
   request: (r: SenderRequestInput) => call<SenderRequest>('POST', '/v1/senders/requests', r),
-  add: (s: Pick<Sender, 'sender_id' | 'display_name' | 'category'>) => call<Sender>('POST', '/v1/senders', s),
+  add: (s: Pick<Sender, 'sender_id' | 'display_name' | 'category' | 'tier' | 'daily_limit'> & { request_id?: string }) => call<Sender>('POST', '/v1/senders', s),
   setStatus: (id: string, status: Sender['status']) => call<Sender>('PATCH', `/v1/senders/${id}`, { status }),
+  update: (id: string, p: Partial<Pick<Sender, 'tier' | 'daily_limit'>>) => call<Sender>('PATCH', `/v1/senders/${id}`, p),
   setRequestStatus: (id: string, status: SenderRequest['status'], note?: string) =>
     call<SenderRequest>('PATCH', `/v1/senders/requests/${id}`, { status, note }),
 };

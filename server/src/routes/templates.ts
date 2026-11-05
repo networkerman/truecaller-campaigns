@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireAuth, requirePermission } from '../auth.js';
-import { config } from '../config.js';
+import { ButtonsSchema, MediaSchema } from '../rich.js';
 import {
   createTemplate,
   deleteTemplate,
@@ -16,6 +16,11 @@ const TemplateBody = z.object({
   name: z.string().trim().min(1).max(100),
   category: z.enum(['promotional', 'transactional', 'service']),
   body: z.string().trim().min(1).max(1000),
+  // Fallback per variable, used when a contact's column is empty, e.g. { "name": "there" }.
+  variable_defaults: z.record(z.string(), z.string().max(200)).optional(),
+  // Rich message parts: one image, video or file, and up to 3 link or quick-reply buttons.
+  media: MediaSchema.nullable().optional(),
+  buttons: ButtonsSchema.default([]),
 });
 const Id = z.object({ id: z.string().uuid() });
 
@@ -66,7 +71,8 @@ export async function templateRoutes(app: FastifyInstance) {
     return reply.code(204).send();
   });
 
-  // Submits for approval. Mock mode approves straight away; the real flow depends on the Truecaller API.
+  // Submits for approval. Approved straight away: Truecaller Business Chat v2 sends free text and has
+  // no template review, so there is nothing to wait for on either provider.
   app.post('/v1/templates/:id/submit', manage, async (req, reply) => {
     const p = Id.safeParse(req.params);
     const t = p.success ? await getTemplate(req.ctx.workspaceId, p.data.id) : null;
@@ -74,7 +80,7 @@ export async function templateRoutes(app: FastifyInstance) {
     if (t.status !== 'draft' && t.status !== 'rejected') {
       return reply.code(409).send({ error: `template is already ${t.status}` });
     }
-    return setTemplateStatus(t.id, config.provider === 'mock' ? 'approved' : 'submitted');
+    return setTemplateStatus(t.id, 'approved');
   });
 
   app.post('/v1/templates/:id/preview', view, async (req, reply) => {
@@ -83,7 +89,7 @@ export async function templateRoutes(app: FastifyInstance) {
     if (!t) return reply.code(404).send({ error: 'not found' });
     const values = z.record(z.string(), z.string()).safeParse((req.body as { values?: unknown } | undefined)?.values ?? {});
     if (!values.success) return reply.code(400).send({ error: 'values must be an object of strings' });
-    const out = render(t.body, values.data);
+    const out = render(t.body, values.data, t.variable_defaults);
     return 'error' in out ? reply.code(400).send(out) : out;
   });
 }
