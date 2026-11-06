@@ -4,7 +4,7 @@
 
 	@api path /v1/* /webhooks/* /health
 	handle @api {
-		reverse_proxy api:3000
+		reverse_proxy api:3300
 	}
 
 	handle {
