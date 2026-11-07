@@ -1,7 +1,7 @@
 const env = process.env;
 
 export const config = {
-  port: Number(env.PORT ?? 3000),
+  port: Number(env.PORT ?? 3300),
   databaseUrl: env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/truecaller',
   provider: (env.TC_PROVIDER ?? 'mock') as 'mock' | 'truecaller',
   tc: {

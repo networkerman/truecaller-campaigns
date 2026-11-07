@@ -1,0 +1,24 @@
+# Same routes as deploy/Caddyfile, but plain HTTP on :3310 with no certificate of its own. Used when
+# the plugins share one VM and a single front proxy (plugin-docker/proxy/Caddyfile) owns 80/443.
+{
+	auto_https off
+	admin off
+}
+
+:3310 {
+	encode gzip
+
+	@api path /v1/* /webhooks/* /health
+	handle @api {
+		reverse_proxy api:3300
+	}
+
+	handle {
+		root * /srv
+		@index path / /index.html
+		header @index Cache-Control "no-cache"
+		header /assets/* Cache-Control "public, max-age=31536000, immutable"
+		try_files {path} /index.html
+		file_server
+	}
+}

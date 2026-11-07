@@ -33,6 +33,7 @@ services:
     <<: *app
     environment:
       RUN_MODE: api
+      PORT: "3300"   # plugin port registry; set here so an old PORT in the env file cannot win
 
   # Always-on campaign sender. Skips migrations; the api container runs them.
   worker:
